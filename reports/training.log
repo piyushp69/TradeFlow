@@ -1,210 +1,58 @@
-2026-09-18 00:43:01,917 INFO TradeFlow training run | sklearn=1.8.0 lightgbm=4.7.0 | seed=42
-2026-09-18 00:43:02,018 INFO Loaded cached dataset: 384215 rows x 146 columns
-2026-09-18 00:43:04,545 ERROR $LTIM.NS: possibly delisted; no price data found  (period=10y) (Yahoo error = "No data found, symbol may be delisted")
-2026-09-18 00:43:04,546 ERROR 
+2026-09-24 22:06:57,855 INFO TradeFlow training run | sklearn=1.8.0 lightgbm=4.7.0 | seed=42
+2026-09-24 22:06:58,147 INFO Loaded cached dataset: 382001 rows x 146 columns
+2026-09-24 22:07:00,331 ERROR $LTIM.NS: possibly delisted; no price data found  (period=10y) (Yahoo error = "No data found, symbol may be delisted")
+2026-09-24 22:07:00,331 ERROR 
 1 Failed download:
-2026-09-18 00:43:04,546 ERROR ['LTIM.NS']: possibly delisted; no price data found  (period=10y) (Yahoo error = "No data found, symbol may be delisted")
-2026-09-18 00:43:04,551 INFO Daily data: 187/188 tickers loaded (1 downloaded)
-2026-09-18 00:43:04,552 INFO Context source nifty    rows=2466 range=2016-09-19..2026-09-17
-2026-09-18 00:43:04,552 INFO Context source vix      rows=2451 range=2016-09-19..2026-09-17
-2026-09-18 00:43:04,553 INFO Context source usdinr   rows=2601 range=2016-09-19..2026-09-17
-2026-09-18 00:43:04,553 INFO Sector indices with history: ['^CNXIT', '^CNXPHARMA', '^NSEBANK']
-2026-09-18 00:43:04,553 INFO Leakage audit: point-in-time feature rebuild
-2026-09-18 00:43:09,819 INFO    checked 134 features on ['TCS.NS', 'MARUTI.NS', 'HDFCBANK.NS']: 0 look-ahead failures
-2026-09-18 00:43:10,545 INFO ====================================================================================================
-2026-09-18 00:43:10,545 INFO [weekly] horizon=5 days | labelled rows=383310
-2026-09-18 00:43:10,547 INFO    fold 1 train 2017-09-25..2021-10-01 (163871 rows) -> validate 2021-10-11..2022-08-29 (38416 rows)
-2026-09-18 00:43:10,548 INFO    fold 2 train 2017-09-25..2022-08-22 (202273 rows) -> validate 2022-08-30..2023-07-19 (39170 rows)
-2026-09-18 00:43:10,549 INFO    fold 3 train 2017-09-25..2023-07-12 (241418 rows) -> validate 2023-07-20..2024-06-13 (39732 rows)
-2026-09-18 00:43:10,551 INFO    fold 4 train 2017-09-25..2024-06-06 (281145 rows) -> validate 2024-06-14..2025-05-06 (39820 rows)
-2026-09-18 00:43:10,553 INFO    final train 2017-09-25..2025-05-08 (322232 rows) | TEST 2025-05-16..2026-09-10 (60173 rows)
-2026-09-18 00:43:10,578 INFO    embargo between training and test: 5 sessions (need 4) -> OK
-2026-09-18 00:43:16,448 INFO    [existing_hgb_baseline] 29 features, model=hgb
-2026-09-18 00:43:39,501 INFO       hgb      leaf15   best iters=300  mean CV AUC=0.5077
-2026-09-18 00:43:58,295 INFO       hgb      leaf7    best iters=300  mean CV AUC=0.5021
-2026-09-18 00:44:15,826 INFO       hgb      depth2   best iters=300  mean CV AUC=0.5018
-2026-09-18 00:44:19,764 INFO    [existing_hgb_baseline] CV AUC=0.5077 (folds [0.524, 0.528, 0.492, 0.486]) | test AUC=0.4974
-2026-09-18 00:44:19,772 INFO    [lgbm_baseline] 29 features, model=lgbm
-2026-09-18 00:44:28,206 INFO       lgbm     leaves7  best iters=400  mean CV AUC=0.5110
-2026-09-18 00:44:39,546 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.5066
-2026-09-18 00:44:55,054 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.5049
-2026-09-18 00:45:01,823 INFO       lgbm     depth2   best iters=400  mean CV AUC=0.5050
-2026-09-18 00:45:04,535 INFO    [lgbm_baseline] CV AUC=0.5110 (folds [0.531, 0.511, 0.495, 0.507]) | test AUC=0.4991
-2026-09-18 00:45:04,544 INFO    [lgbm_baseline_market] 55 features, model=lgbm
-2026-09-18 00:45:18,300 INFO       lgbm     leaves7  best iters=200  mean CV AUC=0.5136
-2026-09-18 00:45:35,665 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.5154
-2026-09-18 00:45:58,930 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.5169
-2026-09-18 00:46:09,699 INFO       lgbm     depth2   best iters=400  mean CV AUC=0.5133
-2026-09-18 00:46:17,200 INFO    [lgbm_baseline_market] CV AUC=0.5169 (folds [0.52, 0.552, 0.484, 0.511]) | test AUC=0.5153
-2026-09-18 00:46:17,209 INFO    [lgbm_baseline_daily_mtf] 43 features, model=lgbm
-2026-09-18 00:46:27,656 INFO       lgbm     leaves7  best iters=400  mean CV AUC=0.5095
-2026-09-18 00:46:40,516 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.5077
-2026-09-18 00:46:58,461 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.5075
-2026-09-18 00:47:06,591 INFO       lgbm     depth2   best iters=400  mean CV AUC=0.5058
-2026-09-18 00:47:09,767 INFO    [lgbm_baseline_daily_mtf] CV AUC=0.5095 (folds [0.532, 0.512, 0.496, 0.498]) | test AUC=0.4990
-2026-09-18 00:47:09,775 INFO    [lgbm_baseline_market_mtf] 69 features, model=lgbm
-2026-09-18 00:47:25,173 INFO       lgbm     leaves7  best iters=200  mean CV AUC=0.5185
-2026-09-18 00:47:45,704 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.5103
-2026-09-18 00:48:13,819 INFO       lgbm     leaves31 best iters=200  mean CV AUC=0.5186
-2026-09-18 00:48:26,263 INFO       lgbm     depth2   best iters=400  mean CV AUC=0.5144
-2026-09-18 00:48:31,166 INFO    [lgbm_baseline_market_mtf] CV AUC=0.5186 (folds [0.518, 0.558, 0.49, 0.508]) | test AUC=0.5271
-2026-09-18 00:48:31,175 INFO    [feature selection] 114 candidates (validation folds only, test never used)
-2026-09-18 00:48:33,231 INFO       correlation analysis on 69 features
-2026-09-18 00:48:47,365 INFO       mutual information
-2026-09-18 00:48:59,951 INFO       model gain/split importance
-2026-09-18 00:49:09,226 INFO       permutation importance (validation folds)
-2026-09-18 00:50:05,915 INFO       SHAP (LightGBM TreeSHAP)
-2026-09-18 00:50:26,778 INFO       selected 26 of 114 candidate features
-2026-09-18 00:50:26,778 INFO    [lgbm_selected] 26 features, model=lgbm
-2026-09-18 00:50:34,294 INFO       lgbm     leaves7  best iters=400  mean CV AUC=0.5126
-2026-09-18 00:50:44,560 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.5235
-2026-09-18 00:50:58,050 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.5277
-2026-09-18 00:51:03,932 INFO       lgbm     depth2   best iters=400  mean CV AUC=0.5150
-2026-09-18 00:51:08,044 INFO    [lgbm_selected] CV AUC=0.5277 (folds [0.527, 0.53, 0.505, 0.548]) | test AUC=0.4883
-2026-09-18 00:51:08,129 INFO    [ensemble existing_hgb_baseline+lgbm_selected] CV AUC=0.5219 (folds [0.5339, 0.5335, 0.5018, 0.5181])
-2026-09-18 00:51:08,129 INFO    chosen on validation AUC: lgbm_selected
-2026-09-18 00:51:12,418 INFO    [weekly] reference cross-section: 181 stocks, median P(UP)=0.397
-2026-09-18 00:51:13,972 INFO    [backtest] 62 rebalances | enhanced return=0.0006 sharpe=0.064 | baseline return=0.0128 | benchmark=-0.0154
-2026-09-18 00:51:14,349 INFO    [1h study] weekly: rows=129062 (2023-10-10..2026-09-10), test=32197 rows
-2026-09-18 00:51:14,349 INFO    [without_1h] 69 features, model=lgbm
-2026-09-18 00:51:18,814 INFO       lgbm     leaves7  best iters=400  mean CV AUC=0.5316
-2026-09-18 00:51:25,021 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.5436
-2026-09-18 00:51:29,892 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.5355
-2026-09-18 00:51:32,884 INFO       lgbm     depth2   best iters=400  mean CV AUC=0.5202
-2026-09-18 00:51:35,719 INFO    [without_1h] CV AUC=0.5436 (folds [0.532, 0.613, 0.486]) | test AUC=0.5352
-2026-09-18 00:51:35,726 INFO    [with_1h] 84 features, model=lgbm
-2026-09-18 00:51:40,895 INFO       lgbm     leaves7  best iters=400  mean CV AUC=0.5359
-2026-09-18 00:51:48,155 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.5363
-2026-09-18 00:51:53,876 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.5337
-2026-09-18 00:51:57,470 INFO       lgbm     depth2   best iters=400  mean CV AUC=0.5213
-2026-09-18 00:52:00,926 INFO    [with_1h] CV AUC=0.5363 (folds [0.535, 0.603, 0.471]) | test AUC=0.5418
-2026-09-18 00:52:00,934 INFO    [1h study] weekly: CV AUC without=0.5436 with=0.5363 | test AUC without=0.5352 with=0.5418
-2026-09-18 00:52:01,056 INFO    [weekly] saved model bundle (lgbm_selected)
-2026-09-18 00:52:01,763 INFO ====================================================================================================
-2026-09-18 00:52:01,763 INFO [monthly] horizon=21 days | labelled rows=380414
-2026-09-18 00:52:01,764 INFO    fold 1 train 2017-09-25..2021-08-27 (159743 rows) -> validate 2021-09-29..2022-08-08 (37518 rows)
-2026-09-18 00:52:01,765 INFO    fold 2 train 2017-09-25..2022-07-08 (197198 rows) -> validate 2022-08-10..2023-06-22 (38205 rows)
-2026-09-18 00:52:01,767 INFO    fold 3 train 2017-09-25..2023-05-24 (235301 rows) -> validate 2023-06-23..2024-05-10 (38809 rows)
-2026-09-18 00:52:01,768 INFO    fold 4 train 2017-09-25..2024-04-08 (274086 rows) -> validate 2024-05-13..2025-03-20 (38915 rows)
-2026-09-18 00:52:01,769 INFO    final train 2017-09-25..2025-03-20 (316802 rows) | TEST 2025-04-25..2026-08-19 (59811 rows)
-2026-09-18 00:52:01,789 INFO    embargo between training and test: 21 sessions (need 20) -> OK
-2026-09-18 00:52:07,203 INFO    [existing_hgb_baseline] 29 features, model=hgb
-2026-09-18 00:52:27,154 INFO       hgb      leaf15   best iters=300  mean CV AUC=0.5302
-2026-09-18 00:52:45,100 INFO       hgb      leaf7    best iters=300  mean CV AUC=0.5321
-2026-09-18 00:53:01,867 INFO       hgb      depth2   best iters=50   mean CV AUC=0.5326
-2026-09-18 00:53:02,665 INFO    [existing_hgb_baseline] CV AUC=0.5326 (folds [0.533, 0.589, 0.504, 0.504]) | test AUC=0.5858
-2026-09-18 00:53:02,674 INFO    [lgbm_baseline] 29 features, model=lgbm
-2026-09-18 00:53:10,213 INFO       lgbm     leaves7  best iters=400  mean CV AUC=0.5325
-2026-09-18 00:53:19,689 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.5401
-2026-09-18 00:53:32,469 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.5409
-2026-09-18 00:53:38,361 INFO       lgbm     depth2   best iters=50   mean CV AUC=0.5262
-2026-09-18 00:53:42,325 INFO    [lgbm_baseline] CV AUC=0.5409 (folds [0.538, 0.592, 0.487, 0.547]) | test AUC=0.5336
-2026-09-18 00:53:42,335 INFO    [lgbm_baseline_market] 55 features, model=lgbm
-2026-09-18 00:53:55,148 INFO       lgbm     leaves7  best iters=50   mean CV AUC=0.4910
-2026-09-18 00:54:11,957 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.4980
-2026-09-18 00:54:34,494 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.4979
-2026-09-18 00:54:44,681 INFO       lgbm     depth2   best iters=100  mean CV AUC=0.4952
-2026-09-18 00:54:49,892 INFO    [lgbm_baseline_market] CV AUC=0.4980 (folds [0.487, 0.52, 0.476, 0.51]) | test AUC=0.5139
-2026-09-18 00:54:49,900 INFO    [lgbm_baseline_daily_mtf] 43 features, model=lgbm
-2026-09-18 00:54:59,764 INFO       lgbm     leaves7  best iters=50   mean CV AUC=0.5336
-2026-09-18 00:55:12,544 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.5404
-2026-09-18 00:55:29,580 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.5410
-2026-09-18 00:55:37,965 INFO       lgbm     depth2   best iters=50   mean CV AUC=0.5353
-2026-09-18 00:56:01,385 INFO    [lgbm_baseline_daily_mtf] CV AUC=0.5410 (folds [0.539, 0.589, 0.487, 0.55]) | test AUC=0.5260
-2026-09-18 00:56:01,422 INFO    [lgbm_baseline_market_mtf] 69 features, model=lgbm
-2026-09-18 00:56:51,355 INFO       lgbm     leaves7  best iters=50   mean CV AUC=0.4991
-2026-09-18 00:57:12,228 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.4959
-2026-09-18 00:57:39,901 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.5045
-2026-09-18 00:57:52,471 INFO       lgbm     depth2   best iters=50   mean CV AUC=0.4969
-2026-09-18 00:58:01,239 INFO    [lgbm_baseline_market_mtf] CV AUC=0.5045 (folds [0.482, 0.541, 0.486, 0.509]) | test AUC=0.5082
-2026-09-18 00:58:01,247 INFO    [feature selection] 114 candidates (validation folds only, test never used)
-2026-09-18 00:58:03,159 INFO       correlation analysis on 69 features
-2026-09-18 00:58:16,970 INFO       mutual information
-2026-09-18 00:58:29,522 INFO       model gain/split importance
-2026-09-18 00:58:39,200 INFO       permutation importance (validation folds)
-2026-09-18 00:59:33,503 INFO       SHAP (LightGBM TreeSHAP)
-2026-09-18 00:59:46,843 INFO       selected 24 of 114 candidate features
-2026-09-18 00:59:46,843 INFO    [lgbm_selected] 24 features, model=lgbm
-2026-09-18 00:59:53,121 INFO       lgbm     leaves7  best iters=50   mean CV AUC=0.5340
-2026-09-18 01:00:01,571 INFO       lgbm     leaves15 best iters=100  mean CV AUC=0.5232
-2026-09-18 01:00:13,344 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.5284
-2026-09-18 01:00:18,559 INFO       lgbm     depth2   best iters=200  mean CV AUC=0.5326
-2026-09-18 01:00:19,206 INFO    [lgbm_selected] CV AUC=0.5340 (folds [0.557, 0.608, 0.482, 0.489]) | test AUC=0.5498
-2026-09-18 01:00:19,292 INFO    [ensemble existing_hgb_baseline+lgbm_baseline_daily_mtf] CV AUC=0.5406 (folds [0.5382, 0.595, 0.4885, 0.5409])
-2026-09-18 01:00:19,292 INFO    chosen on validation AUC: lgbm_baseline_daily_mtf
-2026-09-18 01:00:25,300 INFO    [monthly] reference cross-section: 181 stocks, median P(UP)=0.603
-2026-09-18 01:00:26,232 INFO    [backtest] 13 rebalances | enhanced return=0.158 sharpe=1.323 | baseline return=0.2076 | benchmark=0.1579
-2026-09-18 01:00:26,601 INFO    [1h study] monthly: rows=126182 (2023-10-10..2026-08-19), test=31477 rows
-2026-09-18 01:00:26,601 INFO    [without_1h] 69 features, model=lgbm
-2026-09-18 01:00:30,632 INFO       lgbm     leaves7  best iters=400  mean CV AUC=0.5278
-2026-09-18 01:00:36,217 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.5365
-2026-09-18 01:00:40,578 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.5477
-2026-09-18 01:00:43,314 INFO       lgbm     depth2   best iters=400  mean CV AUC=0.5508
-2026-09-18 01:00:44,698 INFO    [without_1h] CV AUC=0.5508 (folds [0.521, 0.681, 0.451]) | test AUC=0.6040
-2026-09-18 01:00:44,703 INFO    [with_1h] 84 features, model=lgbm
-2026-09-18 01:00:49,411 INFO       lgbm     leaves7  best iters=400  mean CV AUC=0.5254
-2026-09-18 01:00:56,016 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.5421
-2026-09-18 01:01:01,185 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.5478
-2026-09-18 01:01:04,495 INFO       lgbm     depth2   best iters=400  mean CV AUC=0.5528
-2026-09-18 01:01:06,205 INFO    [with_1h] CV AUC=0.5528 (folds [0.522, 0.68, 0.457]) | test AUC=0.6028
-2026-09-18 01:01:06,215 INFO    [1h study] monthly: CV AUC without=0.5508 with=0.5528 | test AUC without=0.6040 with=0.6028
-2026-09-18 01:01:06,326 INFO    [monthly] saved model bundle (lgbm_baseline_daily_mtf)
-2026-09-18 01:01:06,886 INFO ====================================================================================================
-2026-09-18 01:01:06,886 INFO [yearly] horizon=252 days | labelled rows=338603
-2026-09-18 01:01:06,888 INFO    fold 1 train 2017-09-25..2020-04-27 (102304 rows) -> validate 2021-04-30..2021-11-11 (23089 rows)
-2026-09-18 01:01:06,889 INFO    fold 2 train 2017-09-25..2020-11-04 (125172 rows) -> validate 2021-11-12..2022-05-27 (23392 rows)
-2026-09-18 01:01:06,890 INFO    fold 3 train 2017-09-25..2021-05-24 (148219 rows) -> validate 2022-05-30..2022-12-09 (23495 rows)
-2026-09-18 01:01:06,891 INFO    fold 4 train 2017-09-25..2021-12-06 (171340 rows) -> validate 2022-12-12..2023-06-26 (23995 rows)
-2026-09-18 01:01:06,892 INFO    final train 2017-09-25..2023-06-27 (239618 rows) | TEST 2024-07-10..2025-09-16 (53476 rows)
-2026-09-18 01:01:06,912 INFO    embargo between training and test: 252 sessions (need 251) -> OK
-2026-09-18 01:01:11,653 INFO    [existing_hgb_baseline] 29 features, model=hgb
-2026-09-18 01:01:23,888 INFO       hgb      leaf15   best iters=300  mean CV AUC=0.5176
-2026-09-18 01:01:35,167 INFO       hgb      leaf7    best iters=300  mean CV AUC=0.5049
-2026-09-18 01:01:44,789 INFO       hgb      depth2   best iters=100  mean CV AUC=0.5228
-2026-09-18 01:01:45,578 INFO    [existing_hgb_baseline] CV AUC=0.5228 (folds [0.5, 0.526, 0.505, 0.56]) | test AUC=0.5470
-2026-09-18 01:01:45,586 INFO    [lgbm_baseline] 29 features, model=lgbm
-2026-09-18 01:01:50,724 INFO       lgbm     leaves7  best iters=400  mean CV AUC=0.5140
-2026-09-18 01:01:57,715 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.5189
-2026-09-18 01:02:05,601 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.5171
-2026-09-18 01:02:09,701 INFO       lgbm     depth2   best iters=100  mean CV AUC=0.5093
-2026-09-18 01:02:12,125 INFO    [lgbm_baseline] CV AUC=0.5189 (folds [0.489, 0.574, 0.52, 0.493]) | test AUC=0.5524
-2026-09-18 01:02:12,133 INFO    [lgbm_baseline_market] 55 features, model=lgbm
-2026-09-18 01:02:21,027 INFO       lgbm     leaves7  best iters=400  mean CV AUC=0.5125
-2026-09-18 01:02:33,182 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.5136
-2026-09-18 01:02:47,040 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.5087
-2026-09-18 01:02:53,989 INFO       lgbm     depth2   best iters=100  mean CV AUC=0.5108
-2026-09-18 01:02:58,381 INFO    [lgbm_baseline_market] CV AUC=0.5136 (folds [0.487, 0.574, 0.516, 0.478]) | test AUC=0.5428
-2026-09-18 01:02:58,389 INFO    [lgbm_baseline_daily_mtf] 43 features, model=lgbm
-2026-09-18 01:03:05,372 INFO       lgbm     leaves7  best iters=400  mean CV AUC=0.5136
-2026-09-18 01:03:14,695 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.5174
-2026-09-18 01:03:25,402 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.5197
-2026-09-18 01:03:30,918 INFO       lgbm     depth2   best iters=50   mean CV AUC=0.5173
-2026-09-18 01:03:35,354 INFO    [lgbm_baseline_daily_mtf] CV AUC=0.5197 (folds [0.485, 0.566, 0.522, 0.506]) | test AUC=0.5465
-2026-09-18 01:03:35,362 INFO    [lgbm_baseline_market_mtf] 69 features, model=lgbm
-2026-09-18 01:03:46,289 INFO       lgbm     leaves7  best iters=400  mean CV AUC=0.5093
-2026-09-18 01:04:01,041 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.5114
-2026-09-18 01:04:18,112 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.5093
-2026-09-18 01:04:26,586 INFO       lgbm     depth2   best iters=100  mean CV AUC=0.5100
-2026-09-18 01:04:31,910 INFO    [lgbm_baseline_market_mtf] CV AUC=0.5114 (folds [0.483, 0.572, 0.519, 0.472]) | test AUC=0.5463
-2026-09-18 01:04:31,919 INFO    [feature selection] 114 candidates (validation folds only, test never used)
-2026-09-18 01:04:33,615 INFO       correlation analysis on 69 features
-2026-09-18 01:04:47,344 INFO       mutual information
-2026-09-18 01:04:59,823 INFO       model gain/split importance
-2026-09-18 01:05:06,623 INFO       permutation importance (validation folds)
-2026-09-18 01:05:43,216 INFO       SHAP (LightGBM TreeSHAP)
-2026-09-18 01:05:53,957 INFO       selected 27 of 114 candidate features
-2026-09-18 01:05:53,957 INFO    [lgbm_selected] 27 features, model=lgbm
-2026-09-18 01:05:58,702 INFO       lgbm     leaves7  best iters=400  mean CV AUC=0.5124
-2026-09-18 01:06:05,293 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.5159
-2026-09-18 01:06:12,748 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.5102
-2026-09-18 01:06:16,467 INFO       lgbm     depth2   best iters=100  mean CV AUC=0.5121
-2026-09-18 01:06:18,708 INFO    [lgbm_selected] CV AUC=0.5159 (folds [0.495, 0.573, 0.518, 0.478]) | test AUC=0.5431
-2026-09-18 01:06:18,759 INFO    [ensemble existing_hgb_baseline+lgbm_baseline_daily_mtf] CV AUC=0.5206 (folds [0.4887, 0.5611, 0.518, 0.5149])
-2026-09-18 01:06:18,759 INFO    chosen on validation AUC: existing_hgb_baseline
-2026-09-18 01:06:19,803 INFO    [yearly] reference cross-section: 181 stocks, median P(UP)=0.682
-2026-09-18 01:06:20,583 INFO    [backtest] 1 rebalances | enhanced return=-0.0079 sharpe=None | baseline return=-0.0079 | benchmark=0.0127
-2026-09-18 01:06:20,584 WARNING    [backtest] only 1 non-overlapping periods for yearly: indicative only
-2026-09-18 01:06:20,796 WARNING    [1h study] yearly: not enough labelled rows inside the 1h window (test=21505)
-2026-09-18 01:06:20,812 INFO    [yearly] saved model bundle (existing_hgb_baseline)
-2026-09-18 01:06:21,939 INFO Reports written to D:\TradeFlow\reports (30 files)
-2026-09-18 01:06:21,939 INFO Done in 23.3 minutes
+2026-09-24 22:07:00,334 ERROR ['LTIM.NS']: possibly delisted; no price data found  (period=10y) (Yahoo error = "No data found, symbol may be delisted")
+2026-09-24 22:07:00,354 INFO Daily data: 187/188 tickers loaded (1 downloaded)
+2026-09-24 22:07:00,359 INFO Context source nifty    rows=2466 range=2016-09-19..2026-09-17
+2026-09-24 22:07:00,361 INFO Context source vix      rows=2451 range=2016-09-19..2026-09-17
+2026-09-24 22:07:00,363 INFO Context source usdinr   rows=2601 range=2016-09-19..2026-09-17
+2026-09-24 22:07:00,363 INFO Sector indices with history: ['^CNXIT', '^CNXPHARMA', '^NSEBANK']
+2026-09-24 22:07:00,364 INFO Leakage audit: point-in-time feature rebuild
+2026-09-24 22:07:30,149 INFO    checked 134 features on ['TCS.NS', 'MARUTI.NS', 'HDFCBANK.NS']: 0 look-ahead failures
+2026-09-24 22:07:35,648 INFO ====================================================================================================
+2026-09-24 22:07:35,649 INFO [weekly] horizon=5 days | labelled rows=381101
+2026-09-24 22:07:35,655 INFO    fold 1 train 2017-09-25..2021-10-01 (162882 rows) -> validate 2021-10-11..2022-08-29 (38196 rows)
+2026-09-24 22:07:35,665 INFO    fold 2 train 2017-09-25..2022-08-22 (201064 rows) -> validate 2022-08-30..2023-07-19 (38950 rows)
+2026-09-24 22:07:35,672 INFO    fold 3 train 2017-09-25..2023-07-12 (239989 rows) -> validate 2023-07-20..2024-06-13 (39512 rows)
+2026-09-24 22:07:35,681 INFO    fold 4 train 2017-09-25..2024-06-06 (279496 rows) -> validate 2024-06-14..2025-05-06 (39600 rows)
+2026-09-24 22:07:35,691 INFO    final train 2017-09-25..2025-05-08 (320356 rows) | TEST 2025-05-16..2026-09-10 (59845 rows)
+2026-09-24 22:07:35,779 INFO    embargo between training and test: 5 sessions (need 4) -> OK
+2026-09-24 22:07:54,298 INFO    [existing_hgb_baseline] 29 features, model=hgb
+2026-09-24 22:08:39,614 INFO       hgb      leaf15   best iters=300  mean CV AUC=0.5057
+2026-09-24 22:09:04,424 INFO       hgb      leaf7    best iters=300  mean CV AUC=0.5024
+2026-09-24 22:09:46,307 INFO       hgb      depth2   best iters=25   mean CV AUC=0.5059
+2026-09-24 22:09:49,166 INFO    [existing_hgb_baseline] CV AUC=0.5059 (folds [0.522, 0.514, 0.456, 0.531]) | test AUC=0.5360
+2026-09-24 22:09:49,199 INFO    [lgbm_baseline] 29 features, model=lgbm
+2026-09-24 22:10:30,805 INFO       lgbm     leaves7  best iters=400  mean CV AUC=0.5056
+2026-09-24 22:11:38,518 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.5085
+2026-09-24 22:13:02,532 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.5076
+2026-09-24 22:13:37,714 INFO       lgbm     depth2   best iters=400  mean CV AUC=0.5046
+2026-09-24 22:13:57,784 INFO    [lgbm_baseline] CV AUC=0.5085 (folds [0.528, 0.516, 0.496, 0.493]) | test AUC=0.5154
+2026-09-24 22:13:57,822 INFO    [lgbm_baseline_market] 55 features, model=lgbm
+2026-09-24 22:14:40,186 INFO       lgbm     leaves7  best iters=200  mean CV AUC=0.5158
+2026-09-24 22:15:31,874 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.5168
+2026-09-24 22:16:02,761 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.5186
+2026-09-24 22:16:27,780 INFO       lgbm     depth2   best iters=400  mean CV AUC=0.5142
+2026-09-24 22:17:03,553 INFO    [lgbm_baseline_market] CV AUC=0.5186 (folds [0.524, 0.555, 0.49, 0.506]) | test AUC=0.5161
+2026-09-24 22:17:03,587 INFO    [lgbm_baseline_daily_mtf] 43 features, model=lgbm
+2026-09-24 22:17:46,921 INFO       lgbm     leaves7  best iters=400  mean CV AUC=0.5094
+2026-09-24 22:19:01,751 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.5086
+2026-09-24 22:20:25,959 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.5077
+2026-09-24 22:21:03,823 INFO       lgbm     depth2   best iters=400  mean CV AUC=0.5074
+2026-09-24 22:21:07,355 INFO    [lgbm_baseline_daily_mtf] CV AUC=0.5094 (folds [0.529, 0.512, 0.494, 0.502]) | test AUC=0.5063
+2026-09-24 22:21:07,364 INFO    [lgbm_baseline_market_mtf] 69 features, model=lgbm
+2026-09-24 22:21:24,612 INFO       lgbm     leaves7  best iters=400  mean CV AUC=0.5163
+2026-09-24 22:22:37,656 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.5120
+2026-09-24 22:23:25,535 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.5186
+2026-09-24 22:24:07,454 INFO       lgbm     depth2   best iters=400  mean CV AUC=0.5137
+2026-09-24 22:25:05,346 INFO    [lgbm_baseline_market_mtf] CV AUC=0.5186 (folds [0.528, 0.551, 0.493, 0.503]) | test AUC=0.5244
+2026-09-24 22:25:05,380 INFO    [feature selection] 114 candidates (validation folds only, test never used)
+2026-09-24 22:25:13,101 INFO       correlation analysis on 69 features
+2026-09-24 22:26:04,788 INFO       mutual information
+2026-09-24 22:26:59,230 INFO       model gain/split importance
+2026-09-24 22:27:48,956 INFO       permutation importance (validation folds)
+2026-09-24 22:31:53,625 INFO       SHAP (LightGBM TreeSHAP)
+2026-09-24 22:32:51,327 INFO       selected 26 of 114 candidate features
+2026-09-24 22:32:51,327 INFO    [lgbm_selected] 26 features, model=lgbm
