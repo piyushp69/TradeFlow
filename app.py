@@ -1,6 +1,6 @@
 import streamlit as st
 
-from models.inference import load_live_frame, market_snapshot, timeframe_snapshot
+from models.inference import completed_sessions, load_live_frame, market_snapshot, timeframe_snapshot
 from models.predictor import StockPredictor
 from ui import layout
 from ui.visuals import plot_price_action
@@ -54,9 +54,14 @@ if processed is None:
     st.stop()
 
 predictor = load_predictor()
-results = predictor.predict_all(processed, explain=True) or {}
+# The models were trained on complete sessions: during market hours, forecast from the last completed close
+model_input = completed_sessions(processed)
+results = predictor.predict_all(model_input, explain=True) or {}
 
 st.markdown("### Forecast Summary")
+if len(model_input) < len(processed) and not model_input.empty:
+    st.caption(f"Today's session is still open, so forecasts use the last completed close "
+               f"({model_input['Date'].iloc[-1]:%d %b %Y}).")
 if results:
     periods = [("Weekly", "weekly", "next 5 sessions"), ("Monthly", "monthly", "next 21 sessions"),
                ("Yearly", "yearly", "next 252 sessions")]
@@ -64,6 +69,8 @@ if results:
         if key in results:
             with col:
                 layout.forecast_card(label, horizon_text, results[key])
+elif predictor.models:
+    st.error("The forecast could not be computed for this ticker. Check the app logs for details.")
 else:
     st.error("Model state unavailable. Run `python trainer.py` to build the model artifacts.")
 
@@ -110,4 +117,4 @@ with model_tab:
                                        key="model_horizon", label_visibility="collapsed")
         layout.model_performance_section(results, horizon or "weekly")
     else:
-        st.info("No trained models found.")
+        st.info("No forecast available for this ticker." if predictor.models else "No trained models found.")

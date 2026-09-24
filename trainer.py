@@ -38,8 +38,9 @@ from features.selection import run_feature_selection
 from models.training import (RANDOM_STATE, evaluate, fit_model, predict_proba, run_experiment,
                              walk_forward_folds)
 
+# Tradable stocks only: NIFTY 50 is loaded separately as market context (load_context_sources)
 STOCKS = [
-    '^NSEI', 'RELIANCE.NS', 'TCS.NS', 'HDFCBANK.NS', 'ICICIBANK.NS', 'INFY.NS', 'SBIN.NS',
+    'RELIANCE.NS', 'TCS.NS', 'HDFCBANK.NS', 'ICICIBANK.NS', 'INFY.NS', 'SBIN.NS',
     'BHARTIARTL.NS', 'ITC.NS', 'HINDUNILVR.NS', 'LT.NS', 'BAJFINANCE.NS', 'AXISBANK.NS',
     'ASIANPAINT.NS', 'MARUTI.NS', 'SUNPHARMA.NS', 'TITAN.NS', 'HCLTECH.NS', 'TATASTEEL.NS',
     'NTPC.NS', 'POWERGRID.NS', 'KOTAKBANK.NS', 'ADANIENT.NS', 'COALINDIA.NS', 'BAJAJFINSV.NS',
@@ -130,12 +131,14 @@ def build_dataset(use_cache=True, use_intraday=True, rebuild=False):
     """Feature frame for every stock, concatenated. Cached on disk between runs."""
     if not rebuild and os.path.exists(DATASET_CACHE):
         data = pd.read_pickle(DATASET_CACHE)
+        # A cache built from an older universe may hold tickers that have since been removed from STOCKS
+        data = data[data["Stock"].isin(STOCKS)].reset_index(drop=True)
         logger.info("Loaded cached dataset: %d rows x %d columns", len(data), data.shape[1])
         return data
 
     sources, prices = load_context_sources(use_cache)
     context = build_context(sources)
-    intraday = get_many_intraday([s for s in STOCKS if s != NIFTY_TICKER], "1h") if use_intraday else {}
+    intraday = get_many_intraday(STOCKS, "1h") if use_intraday else {}
 
     frames, skipped = [], []
     start = time.time()
@@ -354,7 +357,6 @@ def train_horizon(data, name, horizon_days, invalid_map, reports):
     })
     add_reference_cross_section(bundle, final_model, data, chosen_features, name)
 
-    reports[f"predictions_{name}"] = test_predictions
     baseline_predictions = next(r["test_predictions"] for r in results if r["name"] == EXPERIMENTS[0][0])
     return bundle, test_predictions, baseline_predictions
 
@@ -451,7 +453,6 @@ def generate_base_model(use_cache=True, rebuild_data=False, horizons=None, use_i
         reports[f"backtest_{name}"] = bundle["backtest"]
         reports[f"equity_curve_{name}"] = backtests["enhanced"]["equity_curve"]
         reports[f"equity_curve_baseline_{name}"] = backtests["baseline"]["equity_curve"]
-        reports[f"trades_{name}"] = backtests["enhanced"]["trades"]
         if run_1h_study:
             run_intraday_study(data, name, days, reports)
 
@@ -461,7 +462,15 @@ def generate_base_model(use_cache=True, rebuild_data=False, horizons=None, use_i
         summary[name]["n_selected_features"] = len(bundle.get("selected_features") or [])
         logger.info("   [%s] saved model bundle (%s)", name, bundle["experiment"])
 
-    with open(os.path.join(OUTPUT_DIR, "metrics.json"), "w", encoding="utf-8") as fh:
+    metrics_path = os.path.join(OUTPUT_DIR, "metrics.json")
+    if horizons and os.path.exists(metrics_path):
+        # A run limited to some horizons keeps the other horizons' entries
+        try:
+            with open(metrics_path, encoding="utf-8") as fh:
+                summary = {**json.load(fh), **summary}
+        except (OSError, ValueError) as exc:
+            logger.warning("Could not merge the existing metrics.json (%s); writing this run only", exc)
+    with open(metrics_path, "w", encoding="utf-8") as fh:
         json.dump(summary, fh, indent=2, default=str)
     save_reports(reports)
     logger.info("Done in %.1f minutes", (time.time() - start) / 60)

@@ -88,8 +88,9 @@ def sidebar_controls():
     st.sidebar.markdown("---")
     st.sidebar.markdown("### About")
     st.sidebar.caption(
-        "Gradient-boosting models trained on ~180 NSE stocks with 29 scale-free technical and "
-        "market-context features. Each horizon is backtested on a held-out, most-recent time period."
+        "Gradient-boosting models trained on ~180 NSE stocks with scale-free technical, trend and "
+        "market-context features chosen per horizon. Each horizon is backtested on a held-out, most-recent "
+        "time period."
     )
     st.sidebar.warning("Not financial advice. Predictions are based on historical patterns and are "
                        "only slightly better than chance.", icon="⚠️")
@@ -106,7 +107,7 @@ def welcome():
     c1, c2, c3 = st.columns(3)
     blocks = [
         ("📥 Live data", "10 years of daily prices from Yahoo Finance, plus NIFTY 50 market context."),
-        ("🧮 29 features", "Momentum, trend, oscillators, volatility, volume and relative strength."),
+        ("🧮 Scale-free features", "Momentum, trend, oscillators, volatility, volume, market and sector context."),
         ("🤖 3 horizons", "Weekly, monthly and yearly direction, each with honest backtest metrics."),
     ]
     for col, (title, text) in zip((c1, c2, c3), blocks):
@@ -174,7 +175,7 @@ def forecast_card(label, horizon_text, res):
                 <div class="prob-mark" style="left:60%"></div>
             </div>
             <div class="prob-legend"><span>Ranks above {rank:.0f}% of NSE universe</span><span>markers = neutral zone</span></div>
-            <p class="card-meta">Backtest AUC {metrics.get('roc_auc', 0):.3f} ·
+            <p class="card-meta">Test AUC {metrics.get('roc_auc', 0):.3f} ·
                top-quintile hit rate {metrics.get('up_rate_top_quintile', 0):.1%}
                vs {metrics.get('up_rate_bottom_quintile', 0):.1%} bottom</p>
         </div>

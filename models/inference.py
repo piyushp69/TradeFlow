@@ -8,8 +8,8 @@ import logging
 
 import pandas as pd
 
-from data.fetcher import (drop_incomplete_bars, get_many_stocks, get_stock_data, load_india_vix,
-                          load_intraday_data, load_nifty_data, load_usdinr_data)
+from data.fetcher import (IST, SESSION_CLOSE, drop_incomplete_bars, get_many_stocks, get_stock_data,
+                          load_india_vix, load_intraday_data, load_nifty_data, load_usdinr_data)
 from data.sectors import SECTOR_INDEX_TICKERS, get_sector, get_sector_peers
 from features.market import MarketContext, SectorPanel
 from features.pipeline import build_feature_frame
@@ -70,6 +70,19 @@ def load_live_frame(ticker, with_intraday=True):
     if frame is not None:
         meta["feature_coverage"] = float(frame.tail(1).notna().mean(axis=1).iloc[0]) if len(frame) else 0.0
     return raw, frame, meta
+
+
+def completed_sessions(frame, now=None):
+    """Rows whose NSE session has closed.
+
+    During market hours Yahoo's latest daily bar is still forming (partial price and volume), while the models
+    were trained on complete sessions only. Features only look backwards, so dropping that row leaves every
+    earlier row exactly as a build without it would produce.
+    """
+    if frame is None or frame.empty:
+        return frame
+    now = now or pd.Timestamp.now(tz=IST).tz_localize(None)
+    return frame[frame["Date"] + SESSION_CLOSE <= now]
 
 
 def latest_row(frame):
