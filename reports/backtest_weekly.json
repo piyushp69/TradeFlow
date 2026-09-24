@@ -1,0 +1,88 @@
+{
+  "enhanced": {
+    "metrics": {
+      "cumulative_return": 0.0006,
+      "annualised_return": 0.0005,
+      "annualised_volatility": 0.1223,
+      "sharpe_ratio": 0.064,
+      "max_drawdown": -0.1027,
+      "win_rate": 0.4595,
+      "profit_factor": 0.923,
+      "number_of_trades": 2294,
+      "average_trade_return": -0.0012,
+      "periods": 62,
+      "total_cost_paid": 0.186,
+      "excess_return_vs_benchmark": 0.016
+    },
+    "benchmark": {
+      "cumulative_return": -0.0154,
+      "annualised_return": -0.0125,
+      "annualised_volatility": 0.1157,
+      "sharpe_ratio": -0.052,
+      "max_drawdown": -0.1135,
+      "win_rate": null,
+      "profit_factor": null,
+      "number_of_trades": 0,
+      "average_trade_return": null,
+      "periods": 62,
+      "total_cost_paid": 0.0
+    },
+    "config": {
+      "horizon_days": 5,
+      "rebalance_days": 5,
+      "top_quantile": 0.2,
+      "entry_percentile": null,
+      "exit_percentile": null,
+      "position_sizing": "equal",
+      "transaction_cost_bps": 10.0,
+      "slippage_bps": 5.0,
+      "execution": "next_open",
+      "initial_capital": 1000000,
+      "risk_free_rate": 0.0,
+      "min_positions": 3
+    }
+  },
+  "baseline": {
+    "metrics": {
+      "cumulative_return": 0.0128,
+      "annualised_return": 0.0104,
+      "annualised_volatility": 0.1292,
+      "sharpe_ratio": 0.144,
+      "max_drawdown": -0.103,
+      "win_rate": 0.4634,
+      "profit_factor": 0.926,
+      "number_of_trades": 2294,
+      "average_trade_return": -0.0012,
+      "periods": 62,
+      "total_cost_paid": 0.186,
+      "excess_return_vs_benchmark": 0.0282
+    },
+    "benchmark": {
+      "cumulative_return": -0.0154,
+      "annualised_return": -0.0125,
+      "annualised_volatility": 0.1157,
+      "sharpe_ratio": -0.052,
+      "max_drawdown": -0.1135,
+      "win_rate": null,
+      "profit_factor": null,
+      "number_of_trades": 0,
+      "average_trade_return": null,
+      "periods": 62,
+      "total_cost_paid": 0.0
+    },
+    "config": {
+      "horizon_days": 5,
+      "rebalance_days": 5,
+      "top_quantile": 0.2,
+      "entry_percentile": null,
+      "exit_percentile": null,
+      "position_sizing": "equal",
+      "transaction_cost_bps": 10.0,
+      "slippage_bps": 5.0,
+      "execution": "next_open",
+      "initial_capital": 1000000,
+      "risk_free_rate": 0.0,
+      "min_positions": 3
+    }
+  }
+}

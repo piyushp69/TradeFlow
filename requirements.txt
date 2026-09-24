@@ -2,7 +2,7 @@ streamlit
 yfinance
 pandas
 numpy
-matplotlib
-seaborn
+plotly
+joblib
 scikit-learn
-openpyxl
+lightgbm

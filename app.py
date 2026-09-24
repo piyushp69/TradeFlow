@@ -1,10 +1,9 @@
 import streamlit as st
-import pandas as pd
-from data.fetcher import get_stock_data
-from features.indicators import calculate_indicators
+
+from models.inference import load_live_frame, market_snapshot, timeframe_snapshot
 from models.predictor import StockPredictor
-import plotly.graph_objects as go
-from datetime import datetime
+from ui import layout
+from ui.visuals import plot_price_action
 
 st.set_page_config(
     page_title="TradeFlow | Advanced Analytics",
@@ -13,159 +12,102 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-st.markdown("""
-<style>
-    .stApp {
-        background-color: #0e1117;
-        color: white;
-    }
-    .main-title {
-        font-size: 45px;
-        font-weight: 800;
-        letter-spacing: -1px;
-        color: #f0f2f6;
-        margin-bottom: 0px;
-    }
-    .sub-title {
-        color: #a1a7b3;
-        font-size: 18px;
-        margin-top: 0px;
-        margin-bottom: 30px;
-    }
-    .pred-card {
-        padding: 25px;
-        border-radius: 15px;
-        text-align: center;
-        background-color: #1a1c24;
-        transition: transform 0.3s;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-    }
-    .pred-card:hover {
-        transform: translateY(-5px);
-    }
-    .up-card {
-        border: 2px solid #00ff88;
-        box-shadow: 0 0 15px rgba(0, 255, 136, 0.3);
-    }
-    .down-card {
-        border: 2px solid #ff3131;
-        box-shadow: 0 0 15px rgba(255, 49, 49, 0.3);
-    }
-    .card-label { font-size: 16px; text-transform: uppercase; letter-spacing: 1px; color: #a1a7b3; margin-bottom: 5px;}
-    .card-trend { font-size: 36px; font-weight: 800; margin-top: 0; margin-bottom: 5px;}
-    .card-conf { font-size: 14px; color: #888;}
-    [data-testid="stMetricValue"] {
-        font-size: 40px !important;
-        color: #f0f2f6 !important;
-        font-weight: 700;
-    }
-    [data-testid="stMetricLabel"] {
-        color: #a1a7b3 !important;
-    }
-    .stButton>button {
-        width: 100%;
-        background-color: #ff4b4b;
-        color: white;
-        border-radius: 8px;
-        border: none;
-        padding: 10px;
-        font-weight: bold;
-    }
-    .stButton>button:hover {
-        background-color: #ff3333;
-    }
-</style>
-""", unsafe_allow_html=True)
 
-st.markdown('<p class="main-title">TradeFlow</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-title">Automated Insights & Multi-Horizon Trend Forecasting</p>', unsafe_allow_html=True)
+@st.cache_resource
+def load_predictor():
+    return StockPredictor()
 
-st.sidebar.markdown("## Control Panel")
-ticker = st.sidebar.text_input("NSE Ticker", "TCS.NS")
-st.sidebar.markdown("---")
-predict_btn = st.sidebar.button("Run Analytics")
 
-placeholder = st.empty()
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_ticker(symbol):
+    """Prices, the full feature frame (same builder as training) and metadata for one ticker."""
+    return load_live_frame(symbol)
 
-if predict_btn:
-    with st.spinner(f"Processing Pipeline for {ticker}..."):
-        placeholder.empty()
 
-        data = get_stock_data(ticker)
-        
-        if data is not None and not data.empty:
-            processed_data = calculate_indicators(data)
-            current_price = data['Close'].iloc[-1]
-            last_date = data['Date'].iloc[-1].strftime('%d %b, %Y')
-            
-            m1, m2 = st.columns([2, 1])
-            with m1:
-                 st.metric(label=f"Current Market Quote: {ticker} ({last_date})", value=f"₹{current_price:,.2f}")
-            
-            predictor = StockPredictor()
-            results = predictor.predict_all(processed_data)
-            
-            if results:
-                st.markdown("---")
-                st.subheader("Forecast Summary")
-                cols = st.columns(3)
-                
-                periods = [('Weekly', 'weekly'), ('Monthly', 'monthly'), ('Yearly', 'yearly')]
-                
-                for i, (label, key) in enumerate(periods):
-                    if key in results:
-                        direction, conf = results[key]
-                        style_class = "up-card" if direction == "UP" else "down-card"
-                        text_color = "#00ff88" if direction == "UP" else "#ff3131"
-                        
-                        with cols[i]:
-                            st.markdown(f"""
-                                <div class="pred-card {style_class}">
-                                    <p class="card-label">{label}</p>
-                                    <p class="card-trend" style="color:{text_color};">{direction}</p>
-                                    <p class="card-conf">Confidence: {conf}%</p>
-                                </div>
-                            """, unsafe_allow_html=True)
+layout.apply_custom_style()
+layout.header()
 
-                st.markdown("---")
-                st.subheader("Technical Performance Chart")
-                
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(x=processed_data['Date'], y=processed_data['Close'], 
-                                         name="Close Price", line=dict(color='#17BECF', width=2.5)))
+ticker, run = layout.sidebar_controls()
+if run and ticker:
+    st.session_state["active_ticker"] = ticker
 
-                rolling_std = processed_data['Close'].rolling(window=20).std()
-                sma_20 = processed_data['Close'].rolling(window=20).mean()
-                upper_band = sma_20 + (rolling_std * 2)
-                lower_band = sma_20 - (rolling_std * 2)
+# Keep showing the last analysed ticker while the user interacts with charts and tabs
+active = st.session_state.get("active_ticker")
 
-                fig.add_trace(go.Scatter(x=processed_data['Date'], y=upper_band, line=dict(width=0), showlegend=False))
-                fig.add_trace(go.Scatter(x=processed_data['Date'], y=lower_band, line=dict(width=0), fill='tonexty', fillcolor='rgba(23, 190, 207, 0.1)', name="Volatility Band"))
+if not active:
+    layout.welcome()
+    st.stop()
 
-                fig.update_layout(
-                    template="plotly_dark",
-                    hovermode="x unified",
-                    xaxis=dict(showgrid=False),
-                    yaxis=dict(gridcolor='#2d303b'),
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                    margin=dict(l=0, r=0, t=50, b=0),
-                    height=550
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.error("Model state unavailable. Please verify model artifacts.")
-        else:
-             st.error("Data acquisition failed. Check ticker symbol and connectivity.")
+with st.spinner(f"Processing pipeline for {active}..."):
+    raw, processed, meta = load_ticker(active)
+
+if raw is None or raw.empty:
+    st.error(f"Data acquisition failed for **{active}**. Check the ticker symbol (e.g. `INFY.NS`) and your connection.")
+    st.stop()
+
+layout.quote_header(active, raw)
+layout.stats_row(raw)
+
+if processed is None:
+    st.warning("Not enough price history to forecast this ticker (at least ~1 year of trading data is required).")
+    st.plotly_chart(plot_price_action(raw), width="stretch")
+    st.stop()
+
+predictor = load_predictor()
+results = predictor.predict_all(processed, explain=True) or {}
+
+st.markdown("### Forecast Summary")
+if results:
+    periods = [("Weekly", "weekly", "next 5 sessions"), ("Monthly", "monthly", "next 21 sessions"),
+               ("Yearly", "yearly", "next 252 sessions")]
+    for col, (label, key, horizon_text) in zip(st.columns(3), periods):
+        if key in results:
+            with col:
+                layout.forecast_card(label, horizon_text, results[key])
 else:
-    with placeholder.container():
+    st.error("Model state unavailable. Run `python trainer.py` to build the model artifacts.")
+
+st.markdown("")
+chart_tab, market_tab, timeframe_tab, signals_tab, features_tab, model_tab = st.tabs(
+    ["📈 Technical Chart", "🌐 Market Context", "⏱ Multi-Timeframe", "🧭 Signals",
+     "🔬 Feature Analysis", "🤖 Model Performance"])
+
+with chart_tab:
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        range_label = st.segmented_control("Range", list(layout.RANGES), default="1Y", label_visibility="collapsed")
+    with c2:
+        chart_type = st.segmented_control("Chart", ["Candlestick", "Line"], default="Candlestick",
+                                          label_visibility="collapsed")
+    fig = plot_price_action(raw, layout.RANGES.get(range_label or "1Y"), chart_type or "Candlestick")
+    st.plotly_chart(fig, width="stretch")
+
+with market_tab:
+    layout.market_context_section(market_snapshot(processed), meta, processed, active)
+
+with timeframe_tab:
+    model_timeframes = {tf for res in results.values() for group in (res.get("feature_groups") or [])
+                        for tf in (("daily",) if group == "daily_mtf" else
+                                   ("1h",) if group == "intraday_1h" else
+                                   ("5m", "15m") if group == "intraday_short" else ())}
+    layout.timeframe_section(timeframe_snapshot(processed), meta, model_timeframes)
+
+with signals_tab:
+    st.caption(f"Latest technical readings for {active}. The model uses these (and more) as inputs.")
+    layout.technical_signals(processed.iloc[-1])
+    layout.explanation_section(results)
+
+with features_tab:
+    horizon = st.segmented_control("Horizon", ["weekly", "monthly", "yearly"], default="weekly",
+                                   key="feature_horizon", label_visibility="collapsed")
+    layout.feature_analysis_section(horizon or "weekly")
+
+with model_tab:
+    if results:
+        layout.model_insights(results)
         st.markdown("---")
-        st.markdown("""
-        ### Welcome to TradeFlow 🚀
-        Please provide a ticker symbol in the sidebar to initiate comprehensive market analysis.
-        
-        **System Overview:**
-        - Real-time data processing via localized pipelines.
-        - Advanced technical feature engineering.
-        - Machine Learning forecasting across multiple temporal horizons.
-        """)
-        st.info("Supported Ticker Format: [STOCK NAME].NS")
+        horizon = st.segmented_control("Horizon", ["weekly", "monthly", "yearly"], default="weekly",
+                                       key="model_horizon", label_visibility="collapsed")
+        layout.model_performance_section(results, horizon or "weekly")
+    else:
+        st.info("No trained models found.")
