@@ -69,6 +69,9 @@ if results:
         if key in results:
             with col:
                 layout.forecast_card(label, horizon_text, results[key])
+    st.caption("Calls are relative to ~180 NSE stocks: OUTPERFORM means the stock's model score is in the top 40% "
+               "of the universe, UNDERPERFORM the bottom 40%. A horizon whose out-of-sample evaluation did not show a "
+               "consistent edge says so and makes no call. Not financial advice.")
 elif predictor.models:
     st.error("The forecast could not be computed for this ticker. Check the app logs for details.")
 else:
@@ -110,11 +113,10 @@ with features_tab:
     layout.feature_analysis_section(horizon or "weekly")
 
 with model_tab:
-    if results:
-        layout.model_insights(results)
+    # Every number here comes from models/saved_models/metrics.json (written by trainer.py)
+    layout.performance_overview(predictor.metrics)
+    if predictor.metrics:
         st.markdown("---")
         horizon = st.segmented_control("Horizon", ["weekly", "monthly", "yearly"], default="weekly",
                                        key="model_horizon", label_visibility="collapsed")
-        layout.model_performance_section(results, horizon or "weekly")
-    else:
-        st.info("No forecast available for this ticker." if predictor.models else "No trained models found.")
+        layout.model_performance_section(predictor.metrics, horizon or "weekly")

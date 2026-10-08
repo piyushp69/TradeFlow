@@ -1,0 +1,68 @@
+2026-10-08 20:07:01,823 INFO Loaded cached dataset: 381903 rows x 151 columns, data frozen at 2026-09-17
+2026-10-08 20:07:06,905 INFO Panel: 381903 rows, 180 stocks, 2017-09-25..2026-09-17
+2026-10-08 20:07:07,422 INFO Panel: 384215 rows, 181 stocks, 2017-09-25..2026-09-17
+2026-10-08 20:07:07,422 INFO Device: cuda | panel 381903 rows
+2026-10-08 20:07:07,422 INFO ==========================================================================================
+2026-10-08 20:07:07,470 INFO [weekly] fold1 train 2017-09-25..2020-10-06 (120718 rows) | gap 5 sessions | validate 2020-10-14..2021-09-09 (38644 rows)
+2026-10-08 20:07:07,473 INFO [weekly] fold2 train 2017-09-25..2021-09-02 (159357 rows) | gap 5 sessions | validate 2021-09-13..2022-08-05 (39181 rows)
+2026-10-08 20:07:07,473 INFO [weekly] fold3 train 2017-09-25..2022-07-29 (198523 rows) | gap 5 sessions | validate 2022-08-08..2023-07-07 (39954 rows)
+2026-10-08 20:07:07,473 INFO [weekly] fold4 train 2017-09-25..2023-06-30 (238452 rows) | gap 5 sessions | validate 2023-07-10..2024-06-10 (40404 rows)
+2026-10-08 20:07:07,473 INFO [weekly] fold5 train 2017-09-25..2024-06-03 (278851 rows) | gap 5 sessions | validate 2024-06-11..2025-05-08 (40500 rows)
+2026-10-08 20:07:21,882 INFO    baseline                           IC +0.0389 +0.0281 +0.0312 +0.0571 +0.0286 | AUC rel 0.5061 abs 0.5126 | 14s
+2026-10-08 20:07:37,084 INFO    baseline + NIFTY index as a stock  IC +0.0436 +0.0290 +0.0250 +0.0549 +0.0317 | AUC rel 0.5060 abs 0.5130 | 15s
+2026-10-08 20:07:55,633 INFO    baseline, row-count gap            IC +0.0389 +0.0281 +0.0312 +0.0571 +0.0286 | AUC rel 0.5061 abs 0.5126 | 19s
+2026-10-08 20:08:32,306 INFO    candidate pool                     IC +0.0338 +0.0276 +0.0222 +0.0529 +0.0221 | AUC rel 0.5043 abs 0.5083 | 37s
+2026-10-08 20:08:57,438 INFO    xgboost                            IC +0.0338 +0.0294 +0.0296 +0.0534 +0.0212 | AUC rel 0.5048 abs 0.5093 | 25s
+2026-10-08 20:09:19,771 INFO    relative target                    IC +0.0190 +0.0252 +0.0203 +0.0385 +0.0417 | AUC rel 0.5129 abs 0.5150 | 22s
+2026-10-08 20:09:38,526 INFO    clear-move k=0.25                  IC +0.0302 +0.0286 +0.0282 +0.0570 +0.0219 | AUC rel 0.5043 abs 0.5074 | 19s
+2026-10-08 20:09:52,533 INFO    clear-move k=0.5                   IC +0.0311 +0.0222 +0.0213 +0.0550 +0.0161 | AUC rel 0.5035 abs 0.5065 | 14s
+2026-10-08 20:10:14,124 INFO    cross-sectional ranks              IC +0.0232 +0.0322 +0.0164 +0.0645 +0.0058 | AUC rel 0.5039 abs 0.5129 | 22s
+2026-10-08 20:10:35,788 INFO    short-term features                IC +0.0315 +0.0416 +0.0290 +0.0529 +0.0194 | AUC rel 0.5048 abs 0.5063 | 22s
+2026-10-08 20:10:44,452 INFO    regularised depth 4                IC +0.0292 +0.0393 +0.0177 +0.0510 +0.0221 | AUC rel 0.5039 abs 0.5062 | 9s
+2026-10-08 20:10:52,737 INFO    regularised depth 3                IC +0.0306 +0.0354 +0.0169 +0.0473 +0.0213 | AUC rel 0.5035 abs 0.5086 | 8s
+2026-10-08 20:11:06,757 INFO    early stopping (auc)               IC +0.0000 +0.0005 -0.0085 +0.0118 +0.0088 | AUC rel 0.5004 abs 0.5010 | 14s
+2026-10-08 20:12:58,620 INFO    early stopping (rank_ic)           IC -0.0231 +0.0267 +0.0326 +0.0534 +0.0309 | AUC rel 0.5051 abs 0.5126 | 112s
+2026-10-08 20:13:39,016 INFO    pruned                             IC -0.0108 +0.0000 +0.0000 +0.0137 +0.0000 | AUC rel 0.5002 abs 0.5022 | 40s
+2026-10-08 20:13:39,016 INFO [weekly] final configuration: step E0 (xgboost)
+2026-10-08 20:13:39,017 INFO ==========================================================================================
+2026-10-08 20:13:39,067 INFO [monthly] fold1 train 2017-09-25..2020-08-26 (115958 rows) | gap 21 sessions | validate 2020-09-25..2021-08-17 (37948 rows)
+2026-10-08 20:13:39,067 INFO [monthly] fold2 train 2017-09-25..2021-07-16 (153885 rows) | gap 21 sessions | validate 2021-08-18..2022-07-08 (38437 rows)
+2026-10-08 20:13:39,067 INFO [monthly] fold3 train 2017-09-25..2022-06-09 (192259 rows) | gap 21 sessions | validate 2022-07-11..2023-06-02 (39138 rows)
+2026-10-08 20:13:39,067 INFO [monthly] fold4 train 2017-09-25..2023-05-04 (231309 rows) | gap 21 sessions | validate 2023-06-05..2024-04-30 (39840 rows)
+2026-10-08 20:13:39,067 INFO [monthly] fold5 train 2017-09-25..2024-03-27 (271111 rows) | gap 21 sessions | validate 2024-05-02..2025-03-20 (39960 rows)
+2026-10-08 20:13:57,710 INFO    baseline                           IC -0.0033 +0.0414 -0.0472 +0.0357 -0.0028 | AUC rel 0.4987 abs 0.5182 | 19s
+2026-10-08 20:14:16,468 INFO    baseline + NIFTY index as a stock  IC -0.0100 +0.0433 -0.0509 +0.0477 -0.0019 | AUC rel 0.4985 abs 0.5197 | 19s
+2026-10-08 20:14:35,074 INFO    baseline, row-count gap            IC -0.0033 +0.0414 -0.0472 +0.0357 -0.0028 | AUC rel 0.4987 abs 0.5182 | 19s
+2026-10-08 20:15:04,535 INFO    candidate pool                     IC +0.0280 +0.0312 -0.0445 +0.0055 -0.0243 | AUC rel 0.4975 abs 0.4890 | 29s
+2026-10-08 20:15:24,862 INFO    xgboost                            IC +0.0274 +0.0354 -0.0495 -0.0035 -0.0276 | AUC rel 0.4969 abs 0.4903 | 20s
+2026-10-08 20:15:45,846 INFO    relative target                    IC +0.0141 +0.0137 -0.0223 +0.0171 -0.0241 | AUC rel 0.4972 abs 0.5048 | 21s
+2026-10-08 20:16:02,233 INFO    clear-move k=0.25                  IC +0.0012 +0.0417 -0.0595 -0.0111 -0.0297 | AUC rel 0.4948 abs 0.4952 | 16s
+2026-10-08 20:16:14,761 INFO    clear-move k=0.5                   IC +0.0114 +0.0346 -0.0489 +0.0065 -0.0260 | AUC rel 0.4958 abs 0.4931 | 13s
+2026-10-08 20:16:34,709 INFO    cross-sectional ranks              IC +0.0209 +0.0612 -0.0338 -0.0295 -0.0330 | AUC rel 0.4970 abs 0.4828 | 20s
+2026-10-08 20:16:42,876 INFO    regularised depth 4                IC -0.0108 +0.0266 -0.0560 -0.0022 -0.0295 | AUC rel 0.4953 abs 0.4895 | 8s
+2026-10-08 20:16:50,466 INFO    regularised depth 3                IC -0.0179 +0.0301 -0.0546 +0.0171 -0.0304 | AUC rel 0.4962 abs 0.4888 | 8s
+2026-10-08 20:17:01,556 INFO    early stopping (auc)               IC +0.0007 +0.0020 -0.0045 +0.0004 -0.0378 | AUC rel 0.4992 abs 0.5041 | 11s
+2026-10-08 20:18:29,500 INFO    early stopping (rank_ic)           IC -0.0122 +0.0218 -0.0561 +0.0509 -0.0198 | AUC rel 0.4968 abs 0.4796 | 88s
+2026-10-08 20:19:07,389 INFO    pruned                             IC -0.0172 +0.0108 -0.0269 -0.0354 -0.0574 | AUC rel 0.4944 abs 0.4842 | 38s
+2026-10-08 20:19:07,390 INFO [monthly] final configuration: step E0 (xgboost)
+2026-10-08 20:19:07,402 INFO ==========================================================================================
+2026-10-08 20:19:07,444 INFO [yearly] fold1 train 2017-09-25..2019-01-04 (49240 rows) | gap 252 sessions | validate 2020-01-20..2020-09-24 (28751 rows)
+2026-10-08 20:19:07,444 INFO [yearly] fold2 train 2017-09-25..2019-09-19 (77331 rows) | gap 252 sessions | validate 2020-09-25..2021-06-04 (29227 rows)
+2026-10-08 20:19:07,444 INFO [yearly] fold3 train 2017-09-25..2020-06-03 (105787 rows) | gap 252 sessions | validate 2021-06-07..2022-02-09 (29410 rows)
+2026-10-08 20:19:07,444 INFO [yearly] fold4 train 2017-09-25..2021-02-03 (134904 rows) | gap 252 sessions | validate 2022-02-10..2022-10-19 (29754 rows)
+2026-10-08 20:19:07,444 INFO [yearly] fold5 train 2017-09-25..2021-10-13 (164149 rows) | gap 252 sessions | validate 2022-10-20..2023-06-27 (30175 rows)
+2026-10-08 20:19:11,926 INFO    baseline                           IC -0.0845 -0.0705 -0.0150 -0.0503 -0.0556 | AUC rel 0.4762 abs 0.5180 | 4s
+2026-10-08 20:19:14,161 INFO    baseline + NIFTY index as a stock  IC -0.0921 -0.0732 -0.0217 -0.0467 -0.0714 | AUC rel 0.4727 abs 0.5165 | 2s
+2026-10-08 20:19:16,429 INFO    baseline, row-count gap            IC -0.0845 -0.0705 -0.0150 -0.0503 -0.0556 | AUC rel 0.4762 abs 0.5180 | 2s
+2026-10-08 20:19:19,669 INFO    candidate pool                     IC -0.0567 -0.0627 -0.0080 -0.0370 -0.1491 | AUC rel 0.4751 abs 0.5238 | 3s
+2026-10-08 20:19:22,815 INFO    xgboost                            IC -0.0674 -0.0507 -0.0093 -0.0419 -0.1596 | AUC rel 0.4735 abs 0.5245 | 3s
+2026-10-08 20:19:25,801 INFO    relative target                    IC -0.0857 -0.0590 -0.0326 +0.0271 -0.1806 | AUC rel 0.4685 abs 0.4847 | 3s
+2026-10-08 20:19:28,527 INFO    clear-move k=0.25                  IC -0.0692 -0.0610 -0.0185 -0.0438 -0.1662 | AUC rel 0.4721 abs 0.5249 | 3s
+2026-10-08 20:19:31,067 INFO    clear-move k=0.5                   IC -0.0692 -0.0610 -0.0116 -0.0451 -0.0782 | AUC rel 0.4822 abs 0.5283 | 3s
+2026-10-08 20:19:34,019 INFO    cross-sectional ranks              IC -0.1153 -0.0834 -0.0134 +0.0033 -0.2372 | AUC rel 0.4595 abs 0.5374 | 3s
+2026-10-08 20:19:37,017 INFO    regularised depth 2 + subsampling  IC -0.1166 -0.0632 -0.0093 -0.0567 -0.1491 | AUC rel 0.4717 abs 0.5286 | 3s
+2026-10-08 20:19:41,727 INFO    early stopping (auc)               IC -0.0674 -0.0504 -0.0146 -0.0508 -0.0228 | AUC rel 0.4825 abs 0.5291 | 5s
+2026-10-08 20:20:01,688 INFO    early stopping (rank_ic)           IC -0.0674 -0.0697 -0.0046 +0.0298 -0.1797 | AUC rel 0.4726 abs 0.5325 | 20s
+2026-10-08 20:20:06,747 INFO    pruned                             IC -0.0190 -0.1186 -0.0323 +0.0000 +0.0000 | AUC rel 0.4827 abs 0.5042 | 5s
+2026-10-08 20:20:06,747 INFO [yearly] final configuration: step E0 (xgboost)
+2026-10-08 20:20:06,781 INFO Saved reports/experiment_log.md, reports/experiments.json and reports/experiments_<horizon>.csv

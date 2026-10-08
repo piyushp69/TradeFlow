@@ -1,14 +1,19 @@
 """Training entry point.
 
-Run `python trainer.py` to rebuild every artifact:
+    python trainer.py                      train and evaluate every horizon with the frozen configuration
+    python trainer.py --rebuild-data       rebuild the cached feature dataset first (from the price cache)
+    python trainer.py --horizons weekly    a subset of horizons (the others keep their metrics.json entries)
 
-    dataset  -> leakage audit -> experiments (baseline vs enhanced feature groups)
-             -> feature selection -> final model per horizon -> backtest -> reports
+Steps:
+    dataset (frozen at one end date) -> leakage audit -> for each horizon:
+        purged walk-forward folds for the frozen configuration (models/config.py FINAL_SPECS)
+        -> final model fit on every row before the final test period (purged: no label reaches into it)
+        -> one evaluation on the final test period -> edge verdict -> backtest
+        -> the previously deployed model through the same protocol, for the before/after comparison
+    -> models/saved_models/model_<horizon>.pkl, models/saved_models/metrics.json and reports/*
 
-Model choice is made on walk-forward validation folds only. The most recent block of dates is held out as a
-test set and is used exactly once per horizon, after everything else is decided.
-
-Artifacts: models/saved_models/model_<horizon>.pkl, models/saved_models/metrics.json and reports/*.
+The configuration was chosen by experiments.py on walk-forward folds only, before this script scored the final test
+period. The saved model is exactly the model that was scored on the test period: it never saw test-period data.
 """
 import argparse
 import json
@@ -18,10 +23,9 @@ import time
 from datetime import datetime
 
 import joblib
-import lightgbm as lgb
 import numpy as np
 import pandas as pd
-import sklearn
+import xgboost
 from sklearn.metrics import roc_auc_score
 
 from backtest.engine import BacktestConfig, run_backtest
@@ -29,16 +33,20 @@ from data.fetcher import (CACHE_DIR, INDIA_VIX_TICKER, NIFTY_TICKER, USDINR_TICK
                           get_many_stocks)
 from data.sectors import SECTOR_INDEX_TICKERS, get_sector
 from features.indicators import HORIZONS, add_targets
-from features.leakage import (audit_point_in_time, check_intraday_alignment, check_split_integrity,
-                              check_suspicious_features, check_target_leakage)
+from features.leakage import (audit_point_in_time, check_intraday_alignment, check_suspicious_features,
+                              check_target_leakage)
 from features.market import MarketContext, SectorPanel
-from features.pipeline import (FEATURE_GROUPS, PRICE_LEVEL_FEATURES, build_feature_frame, feature_columns,
-                               requirements_for)
-from features.selection import run_feature_selection
-from models.training import (RANDOM_STATE, evaluate, fit_model, predict_proba, run_experiment,
-                             walk_forward_folds)
+from features.pipeline import FEATURE_GROUPS, PRICE_LEVEL_FEATURES, build_feature_frame, requirements_for
+from models.evaluation import (EDGE_MIN_POSITIVE_FOLDS, EDGE_MIN_TSTAT, FIRST_VAL_FRACTION, N_FOLDS, TEST_FRACTION,
+                               daily_rank_ic, edge_verdict, purged_walk_forward)
+from features.labels import label_column
+from models.config import BASELINE_SPECS, FINAL_SPECS, matches
+from models.panel import prepare_panel
+from models.training import RANDOM_STATE, detect_device, to_cpu
+from models.walkforward import kept_feature_share, score_split, walk_forward
 
-# Tradable stocks only: NIFTY 50 is loaded separately as market context (load_context_sources)
+# Tradable stocks only: NIFTY 50 is loaded separately as market context (load_context_sources).
+# LTIM.NS and JBCHEPHARM.NS were removed in Oct 2026: Yahoo Finance returns no usable history for either.
 STOCKS = [
     'RELIANCE.NS', 'TCS.NS', 'HDFCBANK.NS', 'ICICIBANK.NS', 'INFY.NS', 'SBIN.NS',
     'BHARTIARTL.NS', 'ITC.NS', 'HINDUNILVR.NS', 'LT.NS', 'BAJFINANCE.NS', 'AXISBANK.NS',
@@ -50,7 +58,7 @@ STOCKS = [
     'HEROMOTOCO.NS', 'DRREDDY.NS', 'BAJAJ-AUTO.NS', 'YESBANK.NS', 'IDEA.NS', 'UPL.NS',
     'BANDHANBNK.NS', 'DLF.NS', 'VBL.NS', 'PIDILITIND.NS', 'SIEMENS.NS', 'HAL.NS', 'BEL.NS',
     'ABB.NS', 'GAIL.NS', 'PNB.NS', 'BANKBARODA.NS', 'CANBK.NS', 'TRENT.NS', 'GODREJCP.NS',
-    'DABUR.NS', 'CHOLAFIN.NS', 'TVSMOTOR.NS', 'POLYCAB.NS', 'HAVELLS.NS', 'LTIM.NS',
+    'DABUR.NS', 'CHOLAFIN.NS', 'TVSMOTOR.NS', 'POLYCAB.NS', 'HAVELLS.NS',
     'SRF.NS', 'COLPAL.NS', 'SHREECEM.NS', 'AMBUJACEM.NS', 'BHEL.NS', 'RECLTD.NS', 'PFC.NS',
     'IRFC.NS', 'RVNL.NS', 'MAZDOCK.NS', 'COCHINSHIP.NS', 'IRCTC.NS', 'CONCOR.NS',
     'TATACOMM.NS', 'LUPIN.NS', 'AUBANK.NS', 'IDFCFIRSTB.NS', 'FEDERALBNK.NS', 'RBLBANK.NS',
@@ -68,26 +76,27 @@ STOCKS = [
     'MAHABANK.NS', 'J&KBANK.NS', 'KARURVYSYA.NS', 'SOUTHBANK.NS', 'POONAWALLA.NS',
     'LTF.NS', 'M&MFIN.NS', 'MANAPPURAM.NS', 'ANGELONE.NS', 'MCX.NS', 'BSE.NS', 'CDSL.NS',
     'HUDCO.NS', 'NBCC.NS', 'KEC.NS', 'KPIL.NS', 'IRB.NS', 'RAYMOND.NS', 'KAYNES.NS',
-    'SYNGENE.NS', 'LAURUSLABS.NS', 'JBCHEPHARM.NS', 'ZYDUSLIFE.NS', 'NATCOPHARM.NS',
+    'SYNGENE.NS', 'LAURUSLABS.NS', 'ZYDUSLIFE.NS', 'NATCOPHARM.NS',
     'NAM-INDIA.NS', 'HDFCAMC.NS', 'RADICO.NS', 'TIINDIA.NS', 'KEI.NS', 'EXIDEIND.NS'
 ]
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = os.path.join(ROOT, "models", "saved_models")
+METRICS_PATH = os.path.join(OUTPUT_DIR, "metrics.json")
 REPORTS_DIR = os.path.join(ROOT, "reports")
 DATASET_CACHE = os.path.join(CACHE_DIR, "dataset.pkl")
+DATASET_META = os.path.join(CACHE_DIR, "dataset_meta.json")
 MIN_ROWS_PER_STOCK = 500
+SHAP_SAMPLE = 20_000
+SHAP_PLOT_ROWS = 4_000
+LEAKAGE_ALERT_AUC = 0.60
+
+TARGET_TEXT = {
+    "absolute": "rises more than 0.5% over the horizon",
+    "relative": "beats the median stock of the universe over the horizon",
+}
 
 logger = logging.getLogger("tradeflow.trainer")
-
-# Feature-group combinations compared per horizon (experiment 1 is the existing pipeline)
-EXPERIMENTS = [
-    ("existing_hgb_baseline", "hgb", ["baseline"]),
-    ("lgbm_baseline", "lgbm", ["baseline"]),
-    ("lgbm_baseline_market", "lgbm", ["baseline", "market"]),
-    ("lgbm_baseline_daily_mtf", "lgbm", ["baseline", "daily_mtf"]),
-    ("lgbm_baseline_market_mtf", "lgbm", ["baseline", "market", "daily_mtf"]),
-]
 
 
 def setup_logging(verbose=True):
@@ -97,16 +106,36 @@ def setup_logging(verbose=True):
         handlers.append(logging.StreamHandler())
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
                         handlers=handlers, force=True)
-    logging.getLogger("lightgbm").setLevel(logging.WARNING)
+    logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 
 
 # Data
 
-def load_context_sources(use_cache=True):
-    """Every external series needed for market features, plus daily prices for the whole universe."""
+def resolve_data_end(prices, data_end=None):
+    """The last date of the frozen dataset: the given date, else the last NIFTY 50 session in the cache."""
+    if data_end is not None:
+        return pd.Timestamp(data_end)
+    return pd.Timestamp(prices[NIFTY_TICKER]["Date"].max())
+
+
+def truncate(df, data_end, column="Date"):
+    """Bars up to and including data_end. Cached files are refreshed at different times; this aligns them."""
+    if df is None:
+        return None
+    return df[df[column] <= data_end].reset_index(drop=True)
+
+
+def load_context_sources(use_cache=True, data_end=None):
+    """Every external series needed for market features, plus daily prices for the whole universe.
+
+    Every series is cut at the same `data_end`, so a dataset build is reproducible from the cache.
+    Returns (sources, prices, data_end).
+    """
     tickers = list(dict.fromkeys(STOCKS + [NIFTY_TICKER, INDIA_VIX_TICKER, USDINR_TICKER]
                                  + list(SECTOR_INDEX_TICKERS.values())))
     prices = get_many_stocks(tickers, use_cache=use_cache)
+    data_end = resolve_data_end(prices, data_end)
+    prices = {t: truncate(df, data_end) for t, df in prices.items()}
     sources = {
         "nifty": prices.get(NIFTY_TICKER),
         "vix": prices.get(INDIA_VIX_TICKER),
@@ -118,8 +147,9 @@ def load_context_sources(use_cache=True):
         series = sources[name]
         logger.info("Context source %-8s rows=%s range=%s", name, len(series) if series is not None else 0,
                     f"{series['Date'].min():%Y-%m-%d}..{series['Date'].max():%Y-%m-%d}" if series is not None else "-")
-    logger.info("Sector indices with history: %s", sorted(sources["index_prices"]))
-    return sources, prices
+    logger.info("Sector indices with history: %s | data frozen at %s", sorted(sources["index_prices"]),
+                f"{data_end:%Y-%m-%d}")
+    return sources, prices, data_end
 
 
 def build_context(sources):
@@ -127,18 +157,34 @@ def build_context(sources):
                          sector_panel=SectorPanel(sources["prices"], sources["index_prices"]))
 
 
-def build_dataset(use_cache=True, use_intraday=True, rebuild=False):
-    """Feature frame for every stock, concatenated. Cached on disk between runs."""
-    if not rebuild and os.path.exists(DATASET_CACHE):
+def _read_json(path):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return None
+
+
+def build_dataset(use_cache=True, use_intraday=True, rebuild=False, data_end=None):
+    """Feature frame for every stock, concatenated, plus its metadata (date range, universe).
+
+    Cached on disk between runs. The cache is rebuilt when it has no metadata (built by an older version) or
+    was frozen at a different `data_end` than the one requested.
+    """
+    meta = _read_json(DATASET_META)
+    wanted_end = None if data_end is None else f"{pd.Timestamp(data_end):%Y-%m-%d}"
+    if not rebuild and os.path.exists(DATASET_CACHE) and meta and wanted_end in (None, meta.get("data_end")):
         data = pd.read_pickle(DATASET_CACHE)
         # A cache built from an older universe may hold tickers that have since been removed from STOCKS
         data = data[data["Stock"].isin(STOCKS)].reset_index(drop=True)
-        logger.info("Loaded cached dataset: %d rows x %d columns", len(data), data.shape[1])
-        return data
+        logger.info("Loaded cached dataset: %d rows x %d columns, data frozen at %s", len(data), data.shape[1],
+                    meta["data_end"])
+        return data, meta
 
-    sources, prices = load_context_sources(use_cache)
+    sources, prices, data_end = load_context_sources(use_cache, data_end)
     context = build_context(sources)
     intraday = get_many_intraday(STOCKS, "1h") if use_intraday else {}
+    intraday = {t: truncate(bars, data_end, "SessionDate") for t, bars in intraday.items()}
 
     frames, skipped = [], []
     start = time.time()
@@ -156,7 +202,7 @@ def build_dataset(use_cache=True, use_intraday=True, rebuild=False):
             logger.info("   processed %d/%d stocks", index, len(STOCKS))
 
     if not frames:
-        return None
+        raise RuntimeError("no stock had enough price history to build features")
 
     data = pd.concat(frames, ignore_index=True)
     data = data.drop(columns=[c for c in data.columns if c.endswith("_bar_end")])
@@ -170,13 +216,20 @@ def build_dataset(use_cache=True, use_intraday=True, rebuild=False):
         logger.info("   group %-15s %3d features, coverage %.1f%%", group, len(cols),
                     data[cols].notna().mean().mean() * 100)
     data.to_pickle(DATASET_CACHE)
-    return data
+    meta = {"source": "Yahoo Finance daily OHLCV via yfinance (auto_adjust=True: split and dividend adjusted)",
+            "price_history_start": f"{min(df['Date'].min() for df in sources['prices'].values() if df is not None):%Y-%m-%d}",
+            "data_start": f"{data['Date'].min():%Y-%m-%d}", "data_end": f"{data_end:%Y-%m-%d}",
+            "built_at": datetime.now().isoformat(timespec="seconds"), "stocks": int(data["Stock"].nunique()),
+            "rows": int(len(data)), "skipped_stocks": skipped}
+    with open(DATASET_META, "w", encoding="utf-8") as fh:
+        json.dump(meta, fh, indent=2)
+    return data, meta
 
 
 # Leakage audit
 
-def run_leakage_audit(sources, sample_stocks=("TCS.NS", "MARUTI.NS", "HDFCBANK.NS")):
-    """Point-in-time rebuild check plus intraday alignment check. Returns (report, invalid-feature map)."""
+def run_leakage_audit(sources, data_end, sample_stocks=("TCS.NS", "MARUTI.NS", "HDFCBANK.NS")):
+    """Rebuild every feature point-in-time on sample stocks and check intraday bar alignment."""
     logger.info("Leakage audit: point-in-time feature rebuild")
     audited = sum(FEATURE_GROUPS.values(), []) + PRICE_LEVEL_FEATURES
     mismatches, checked, alignment_problems = [], [], {}
@@ -185,7 +238,8 @@ def run_leakage_audit(sources, sample_stocks=("TCS.NS", "MARUTI.NS", "HDFCBANK.N
         if raw is None:
             continue
         bars_path = os.path.join(CACHE_DIR, f"{stock}__1h.pkl")
-        intraday = {"1h": pd.read_pickle(bars_path)} if os.path.exists(bars_path) else None
+        intraday = ({"1h": truncate(pd.read_pickle(bars_path), data_end, "SessionDate")}
+                    if os.path.exists(bars_path) else None)
         result = audit_point_in_time(build_feature_frame, raw, sources, intraday, features=audited)
         checked.append(stock)
         if not result.empty:
@@ -194,222 +248,256 @@ def run_leakage_audit(sources, sample_stocks=("TCS.NS", "MARUTI.NS", "HDFCBANK.N
         if alignment:
             alignment_problems[stock] = alignment
             logger.error("   intraday alignment problem for %s: %s", stock, alignment)
-
     failures = pd.concat(mismatches) if mismatches else pd.DataFrame()
     leaky = sorted(failures["feature"].unique()) if not failures.empty else []
     logger.info("   checked %d features on %s: %d look-ahead failures", len(audited), checked, len(leaky))
-    invalid = {f: "point-in-time audit: value changes when future data is removed" for f in leaky}
-    invalid.update({f: "scale-dependent price level (not usable by a model pooled across stocks)"
-                    for f in PRICE_LEVEL_FEATURES})
-    return ({"stocks_checked": checked, "features_checked": len(audited), "look_ahead_failures": leaky,
-             "intraday_alignment_problems": alignment_problems}, invalid)
+    return {"stocks_checked": checked, "features_checked": len(audited), "look_ahead_failures": leaky,
+            "intraday_alignment_problems": alignment_problems}
+
+
+def check_splits(panel, horizon, folds, test):
+    """Re-check the purge on the actual rows before training (raises on any violation)."""
+    days = HORIZONS[horizon]
+    dates, label_end = panel["Date"], panel[f"label_end_rel_{horizon}"]
+    test_start = dates.iloc[test.eval].min()
+    for split in folds + [test]:
+        if not (label_end.iloc[split.train].max() < dates.iloc[split.eval].min() and split.gap_sessions >= days):
+            raise RuntimeError(f"{horizon} {split.name}: a training label overlaps its evaluation period")
+    for split in folds:
+        if not label_end.iloc[split.eval].max() < test_start:
+            raise RuntimeError(f"{horizon} {split.name}: a validation label reaches into the test period")
+    return {"test_start": f"{test_start:%Y-%m-%d}", "min_gap_sessions": min(s.gap_sessions for s in folds + [test]),
+            "required_gap_sessions": days, "last_training_label_end": test.max_train_label_end, "ok": True}
+
+
+def check_features(panel, train_idx, features, label_col):
+    """Fail on target-like features, or on a single feature that predicts the label implausibly well."""
+    train = panel.iloc[train_idx]
+    label_cols = [c for c in panel.columns if c.startswith(("y_abs_", "y_rel_", "Target_"))]
+    problems = check_target_leakage(train, list(features), label_cols)
+    suspicious = check_suspicious_features(train[list(features)], train[label_col].astype(int))
+    if problems or suspicious:
+        raise RuntimeError(f"feature leakage check failed: {problems} {suspicious}")
+    return {"target_like_features": [], "suspicious_single_feature_auc": {}, "checked": len(features)}
 
 
 # Training
 
-class EnsembleModel:
-    """Mean of component probabilities. Plain averaging keeps training and single-stock inference identical."""
-
-    def __init__(self, components):
-        self.components = components
-
-    def predict_proba(self, X):
-        p = np.mean([c["model"].predict_proba(X[c["features"]])[:, 1] for c in self.components], axis=0)
-        return np.column_stack([1 - p, p])
+def reference_cross_section(fitted, panel):
+    """Model output for every stock on the latest date: the app ranks a ticker against this cross-section."""
+    latest = panel.groupby("Stock").tail(1)
+    latest = latest[latest["Date"] >= panel["Date"].max() - pd.Timedelta(days=10)]
+    return np.sort(fitted.predict(latest)), latest["Date"].max()
 
 
-def add_reference_cross_section(bundle, model, data, features, name):
-    """Score each stock's most recent row: the app ranks a ticker against this cross-section."""
-    latest = data.groupby("Stock").tail(1)
-    latest = latest[latest["Date"] >= data["Date"].max() - pd.Timedelta(days=10)]
-    probs = np.sort(predict_proba(model, latest[features]))
-    bundle["reference_probs"] = probs.tolist()
-    bundle["reference_date"] = f"{latest['Date'].max():%Y-%m-%d}"
-    bundle["threshold"] = float(np.median(probs))
-    logger.info("   [%s] reference cross-section: %d stocks, median P(UP)=%.3f", name, len(probs), bundle["threshold"])
+def feature_report(fitted, spec, panel, train_idx, horizon, fold_metrics):
+    """Per-feature importance of the final model, measured on a sample of its own training rows."""
+    rng = np.random.default_rng(RANDOM_STATE)
+    sample = np.sort(rng.choice(train_idx, size=min(SHAP_SAMPLE, len(train_idx)), replace=False))
+    rows = panel.iloc[sample]
+    values = rows[fitted.columns].set_axis(fitted.features, axis=1)
+    booster = fitted.model.get_booster()
+    contrib = booster.predict(xgboost.DMatrix(rows[fitted.columns]), pred_contribs=True)[:, :-1]
+    shap = pd.DataFrame(contrib, columns=fitted.features, index=rows.index)
+    gain = booster.get_score(importance_type="total_gain")
+    gain = pd.Series({f: gain.get(c, 0.0) for f, c in zip(fitted.features, fitted.columns)})
+    train = panel.iloc[train_idx]
+    single_ic = {f: daily_rank_ic(train["Date"], train[f], train[f"fwd_ret_{horizon}"]).mean()
+                 for f in spec.features}
+    kept = kept_feature_share(fold_metrics, list(spec.features))
+
+    report = pd.DataFrame({"feature": list(spec.features)})
+    report["used"] = report["feature"].isin(fitted.features)
+    report["gain_share"] = report["feature"].map(gain / max(gain.sum(), 1e-12)).fillna(0.0)
+    report["shap_importance"] = report["feature"].map(shap.abs().mean())
+    report["shap_mean_signed"] = report["feature"].map(shap.mean())
+    report["single_feature_rank_ic"] = report["feature"].map(single_ic)
+    report["kept_in_folds"] = report["feature"].map(kept)
+    report = report.sort_values(["used", "shap_importance"], ascending=[False, False]).reset_index(drop=True)
+
+    plot_rows = shap.sample(min(SHAP_PLOT_ROWS, len(shap)), random_state=RANDOM_STATE).index
+    shap_sample = {"shap": shap.loc[plot_rows], "values": values.loc[plot_rows]}
+    return report, shap_sample, values.corr(method="spearman")
 
 
-def evaluate_ensemble(results):
-    """Average the existing model with the best LightGBM model and score it on the validation folds."""
-    existing = next((r for r in results if r["model_type"] == "hgb"), None)
-    best_lgbm = max((r for r in results if r["model_type"] == "lgbm"), key=lambda r: r["cv_auc"], default=None)
-    if existing is None or best_lgbm is None or existing["oof"] is None or best_lgbm["oof"] is None:
-        return None
-    merged = existing["oof"].merge(best_lgbm["oof"], on=["Date", "Stock", "y"], suffixes=("_a", "_b"))
-    if merged.empty:
-        return None
-    merged["p"] = (merged["p_a"] + merged["p_b"]) / 2
-    # Mean AUC per validation fold, exactly how single models are scored (a pooled AUC across folds would
-    # also reward tracking the base rate as it drifts between folds, and would not be comparable)
-    per_fold = [roc_auc_score(g["y"], g["p"]) for _, g in merged.groupby("fold_a") if g["y"].nunique() > 1]
-    if not per_fold:
-        return None
-    return {"components": [existing["name"], best_lgbm["name"]],
-            "cv_auc": round(float(np.mean(per_fold)), 4),
-            "cv_fold_aucs": [round(float(a), 4) for a in per_fold],
-            "parts": (existing, best_lgbm)}
+def run_backtests(panel, horizon, predictions):
+    prices = panel[["Date", "Stock", "Open", "Close"]]
+    config = BacktestConfig(horizon_days=HORIZONS[horizon])
+    results = {name: run_backtest(preds, prices, config) for name, preds in predictions.items() if preds is not None}
+    for name, result in results.items():
+        logger.info("   [backtest %s] %d rebalances | return %s | benchmark %s | sharpe %s", name,
+                    result["metrics"].get("periods", 0), result["metrics"].get("cumulative_return"),
+                    result["benchmark"].get("cumulative_return"), result["metrics"].get("sharpe_ratio"))
+    return results
 
 
-def train_horizon(data, name, horizon_days, invalid_map, reports):
-    target = f"Target_{name.capitalize()}"
-    labelled = data.dropna(subset=[target]).reset_index(drop=True)
-    folds, train_full, test = walk_forward_folds(labelled, horizon_days)
+def previous_model_on_test(bundle_path, panel, test, horizon):
+    """AUC of the model deployed before this pipeline, on the current test period.
 
-    logger.info("=" * 100)
-    logger.info("[%s] horizon=%d days | labelled rows=%d", name, horizon_days, len(labelled))
-    for i, (tr, va) in enumerate(folds, 1):
-        logger.info("   fold %d train %s..%s (%d rows) -> validate %s..%s (%d rows)", i,
-                    tr["Date"].min().date(), tr["Date"].max().date(), len(tr),
-                    va["Date"].min().date(), va["Date"].max().date(), len(va))
-    logger.info("   final train %s..%s (%d rows) | TEST %s..%s (%d rows)",
-                train_full["Date"].min().date(), train_full["Date"].max().date(), len(train_full),
-                test["Date"].min().date(), test["Date"].max().date(), len(test))
-
-    ok, gap = check_split_integrity(train_full["Date"], test["Date"], horizon_days, labelled["Date"])
-    logger.info("   embargo between training and test: %d sessions (need %d) -> %s", gap, horizon_days - 1,
-                "OK" if ok else "FAILED")
-    if not ok:
-        raise RuntimeError(f"embargo violated for {name}: only {gap} sessions between train and test")
-
-    all_candidates = feature_columns(["baseline", "market", "daily_mtf", "intraday_1h", "intraday_short"])
-    horizon_invalid = dict(invalid_map)
-    target_problems = check_target_leakage(train_full, all_candidates, [f"Target_{h.capitalize()}" for h in HORIZONS])
-    if target_problems:
-        logger.error("   target leakage detected: %s", target_problems)
-        horizon_invalid.update({f: r for f, r in target_problems})
-    suspicious = check_suspicious_features(train_full[all_candidates], train_full[target].astype(int))
-    if suspicious:
-        logger.warning("   implausibly strong single-feature AUC: %s", suspicious)
-        horizon_invalid.update({f: f"suspicious single-feature AUC {v}" for f, v in suspicious.items()})
-
-    results = []
-    for exp_name, kind, groups in EXPERIMENTS:
-        results.append(run_experiment(exp_name, kind, folds, train_full, test, feature_columns(groups), target))
-
-    logger.info("   [feature selection] %d candidates (validation folds only, test never used)", len(all_candidates))
-    selected, report, extras = run_feature_selection(folds, train_full, all_candidates, target, horizon_invalid)
-    reports[f"feature_selection_{name}"] = report
-    reports[f"correlation_{name}"] = extras["correlation"]
-    reports[f"shap_sample_{name}"] = extras["shap_sample"]
-    if selected:
-        results.append(run_experiment("lgbm_selected", "lgbm", folds, train_full, test, selected, target))
-
-    ensemble = evaluate_ensemble(results)
-    if ensemble:
-        logger.info("   [ensemble %s] CV AUC=%.4f (folds %s)", "+".join(ensemble["components"]),
-                    ensemble["cv_auc"], ensemble["cv_fold_aucs"])
-
-    best = max(results, key=lambda r: r["cv_auc"])
-    use_ensemble = ensemble is not None and ensemble["cv_auc"] > best["cv_auc"]
-    logger.info("   chosen on validation AUC: %s", "ensemble" if use_ensemble else best["name"])
-
-    experiments_table = pd.DataFrame([{
-        "experiment": r["name"], "model": r["model_type"], "config": r["config"], "iterations": r["n_iterations"],
-        "n_features": r["n_features"], "cv_auc": r["cv_auc"], "cv_fold_aucs": str(r["cv_fold_aucs"]),
-        **{f"val_{k}": v for k, v in (r["validation_metrics"] or {}).items()},
-        **{f"test_{k}": v for k, v in r["test_metrics"].items()},
-    } for r in results])
-
-    if use_ensemble:
-        # Score the test block with the components fit on pre-test data only (as for single models); the
-        # final components below are refit on every labelled row, test block included
-        test_proba = np.mean([part["test_predictions"]["p"].to_numpy() for part in ensemble["parts"]], axis=0)
-        components = [{"model": fit_model(part["model_type"], part["config"], part["n_iterations"],
-                                          labelled[part["features"]], labelled[target].astype(int)),
-                       "features": part["features"], "model_type": part["model_type"], "name": part["name"]}
-                      for part in ensemble["parts"]]
-        final_model = EnsembleModel(components)
-        chosen_features = sorted({f for c in components for f in c["features"]})
-        test_metrics = evaluate(test[target].astype(int), test_proba, test["Date"])
-        bundle = {"components": components, "features": chosen_features, "model_type": "ensemble",
-                  "experiment": "ensemble(" + "+".join(ensemble["components"]) + ")", "config": None,
-                  "n_iterations": None, "cv_auc": ensemble["cv_auc"],
-                  "cv_fold_aucs": ensemble["cv_fold_aucs"],
-                  "validation_metrics": None, "test_metrics": test_metrics}
-        test_predictions = pd.DataFrame({"Date": test["Date"].to_numpy(), "Stock": test["Stock"].to_numpy(),
-                                         "y": test[target].astype(int).to_numpy(), "p": test_proba})
-        experiments_table.loc[len(experiments_table)] = {
-            "experiment": bundle["experiment"], "model": "ensemble", "n_features": len(chosen_features),
-            "cv_auc": ensemble["cv_auc"], **{f"test_{k}": v for k, v in test_metrics.items()}}
-    else:
-        final_model = fit_model(best["model_type"], best["config"], best["n_iterations"],
-                                labelled[best["features"]], labelled[target].astype(int))
-        chosen_features = best["features"]
-        bundle = {"model": final_model, "features": chosen_features, "model_type": best["model_type"],
-                  "experiment": best["name"], "config": best["config"], "n_iterations": best["n_iterations"],
-                  "cv_auc": best["cv_auc"], "cv_fold_aucs": best["cv_fold_aucs"],
-                  "validation_metrics": best["validation_metrics"], "test_metrics": best["test_metrics"]}
-        test_predictions = best["test_predictions"]
-
-    reports[f"experiments_{name}"] = experiments_table
-    bundle.update({
-        "horizon_days": horizon_days,
-        "feature_groups": [g for g, cols in FEATURE_GROUPS.items() if set(cols) & set(chosen_features)],
-        "requirements": sorted(requirements_for(chosen_features)),
-        "selected_features": selected,
-        "test_period": [f"{test['Date'].min():%Y-%m-%d}", f"{test['Date'].max():%Y-%m-%d}"],
-        "validation_period": [f"{folds[0][1]['Date'].min():%Y-%m-%d}", f"{folds[-1][1]['Date'].max():%Y-%m-%d}"],
-        "training_period": [f"{labelled['Date'].min():%Y-%m-%d}", f"{train_full['Date'].max():%Y-%m-%d}"],
-        "trained_at": datetime.now().isoformat(timespec="seconds"),
-        "sklearn_version": sklearn.__version__,
-        "lightgbm_version": lgb.__version__,
-        "random_state": RANDOM_STATE,
-    })
-    add_reference_cross_section(bundle, final_model, data, chosen_features, name)
-
-    baseline_predictions = next(r["test_predictions"] for r in results if r["name"] == EXPERIMENTS[0][0])
-    return bundle, test_predictions, baseline_predictions
-
-
-def run_backtests(name, horizon_days, predictions, baseline_predictions, prices):
-    """Backtest the chosen model and the existing baseline over the same out-of-sample window."""
-    # Only the predicted stocks: FX and index series have other calendars and are not tradable here
-    stocks = set(predictions["Stock"])
-    price_frame = pd.concat([df[["Date", "Stock", "Open", "Close"]] for t, df in prices.items() if t in stocks],
-                            ignore_index=True)
-    config = BacktestConfig(horizon_days=horizon_days)
-    enhanced = run_backtest(predictions, price_frame, config)
-    baseline = run_backtest(baseline_predictions, price_frame, config)
-    periods = enhanced["metrics"].get("periods", 0)
-    logger.info("   [backtest] %d rebalances | enhanced return=%s sharpe=%s | baseline return=%s | benchmark=%s",
-                periods, enhanced["metrics"].get("cumulative_return"), enhanced["metrics"].get("sharpe_ratio"),
-                baseline["metrics"].get("cumulative_return"), enhanced["benchmark"].get("cumulative_return"))
-    if periods < 6:
-        logger.warning("   [backtest] only %d non-overlapping periods for %s: indicative only", periods, name)
-    return {"enhanced": enhanced, "baseline": baseline}
-
-
-def run_intraday_study(data, name, horizon_days, reports):
-    """Does adding 1h-timeframe features help, judged on the window where 1h bars exist?
-
-    Yahoo Finance serves 1h bars for ~730 days only, so this is a separate study and never feeds the main
-    model choice (most of the training history has no intraday data at all).
+    That model was refit on every labelled row, test period included, so this AUC is in-sample. It is recorded to
+    show what refitting on the test period did to the apparent score, never as a performance claim.
     """
-    target = f"Target_{name.capitalize()}"
-    subset = data.dropna(subset=[target]).dropna(subset=FEATURE_GROUPS["intraday_1h"], how="all").reset_index(drop=True)
-    if subset.empty:
+    try:
+        bundle = joblib.load(bundle_path)
+    except Exception as exc:
+        logger.info("   previous bundle not readable (%s)", exc)
         return None
-    folds, train_full, test = walk_forward_folds(subset, horizon_days, cv_folds=3, test_fraction=0.25,
-                                                 cv_start_fraction=0.30)
-    if min(len(f[1]) for f in folds) < 2000 or len(test) < 2000:
-        logger.warning("   [1h study] %s: not enough labelled rows inside the 1h window (test=%d)", name, len(test))
+    if not isinstance(bundle, dict) or bundle.get("model_type") not in ("lgbm", "hgb") or "model" not in bundle:
         return None
+    rows = panel.iloc[test.eval]
+    proba = bundle["model"].predict_proba(rows[bundle["features"]])[:, 1]
+    return {"model": f"{bundle.get('experiment')} ({bundle.get('model_type')})",
+            "auc_abs_on_test_period": round(float(roc_auc_score(rows[f"y_abs_{horizon}"].astype(int), proba)), 4),
+            "note": "refit on every labelled row including this test period, so this AUC is in-sample"}
 
-    logger.info("   [1h study] %s: rows=%d (%s..%s), test=%d rows", name, len(subset),
-                subset["Date"].min().date(), subset["Date"].max().date(), len(test))
-    rows = []
-    for label, groups in (("without_1h", ["baseline", "market", "daily_mtf"]),
-                          ("with_1h", ["baseline", "market", "daily_mtf", "intraday_1h"])):
-        features = feature_columns(groups)
-        result = run_experiment(label, "lgbm", folds, train_full, test, features, target, keep_oof=False)
-        rows.append({"variant": label, "n_features": len(features), "cv_auc": result["cv_auc"],
-                     "cv_fold_aucs": str(result["cv_fold_aucs"]),
-                     **{f"test_{k}": v for k, v in result["test_metrics"].items()}})
-    table = pd.DataFrame(rows)
-    reports[f"intraday_1h_study_{name}"] = table
-    logger.info("   [1h study] %s: CV AUC without=%.4f with=%.4f | test AUC without=%.4f with=%.4f", name,
-                table.cv_auc[0], table.cv_auc[1], table.test_roc_auc[0], table.test_roc_auc[1])
-    return table
+
+def originally_reported(previous, horizon):
+    """Test metrics of the previously deployed model as they were reported before this pipeline."""
+    if not previous:
+        return None
+    if previous.get("schema_version") == 2:
+        baseline = previous.get("horizons", {}).get(horizon, {}).get("baseline") or {}
+        return baseline.get("originally_reported")
+    entry = previous.get(horizon)
+    if not isinstance(entry, dict) or "test_metrics" not in entry:
+        return None
+    test = entry["test_metrics"]
+    return {"model": f"{entry.get('experiment')} ({entry.get('model_type')})", "cv_auc": entry.get("cv_auc"),
+            "test_auc": test.get("roc_auc"), "top_quintile_up_rate": test.get("up_rate_top_quintile"),
+            "bottom_quintile_up_rate": test.get("up_rate_bottom_quintile"), "test_period": entry.get("test_period"),
+            "test_rows": test.get("rows"),
+            "caveats": "4 walk-forward folds without a label-end purge; the test rows included the NIFTY 50 index "
+                       "as a stock; the weekly feature set was selected using the validation folds"}
+
+
+def evaluate_baseline(panel, horizon, folds, test, device):
+    """The previously deployed configuration through the same folds and test period (needs lightgbm)."""
+    spec = BASELINE_SPECS[horizon]
+    try:
+        fold_metrics, fold_summary, _ = walk_forward(spec, panel, folds, horizon, device)
+        _, test_metrics, _, predictions = score_split(spec, panel, test, horizon, device)
+    except ImportError as exc:
+        logger.warning("   baseline skipped: %s (pip install -r requirements-dev.txt)", exc)
+        return None, None
+    logger.info("   [baseline] test AUC rel %.4f abs %.4f | rank IC %+.4f", test_metrics["auc_rel"],
+                test_metrics["auc_abs"], test_metrics["rank_ic"])
+    return {"description": spec.description, "library": spec.library, "target": spec.target,
+            "n_features": len(spec.features), "folds": fold_metrics, "fold_summary": fold_summary,
+            "final_test": test_metrics}, predictions
+
+
+def leakage_alerts(horizon, fold_metrics, test_metrics):
+    """Weekly/monthly direction AUCs above 0.60 are implausible for daily price data: flag them for review."""
+    if horizon == "yearly":
+        return []
+    alerts = []
+    for name, metrics in [(m["fold"], m) for m in fold_metrics] + [("test", test_metrics)]:
+        for key in ("auc_rel", "auc_abs"):
+            if metrics[key] is not None and metrics[key] > LEAKAGE_ALERT_AUC:
+                alerts.append(f"{name} {key}={metrics[key]:.3f}")
+    for alert in alerts:
+        logger.error("   [%s] AUC above %.2f (%s): investigate for leakage before trusting it", horizon,
+                     LEAKAGE_ALERT_AUC, alert)
+    return alerts
+
+
+def train_horizon(panel, horizon, spec, step, device, previous, reports, with_baseline=True):
+    days = HORIZONS[horizon]
+    folds, test = purged_walk_forward(panel["Date"], panel[f"label_end_rel_{horizon}"], days, include_test=True)
+    split_checks = check_splits(panel, horizon, folds, test)
+    logger.info("=" * 100)
+    logger.info("[%s] %d sessions ahead | target: %s | %d candidate features", horizon, days,
+                TARGET_TEXT[spec.target], len(spec.features))
+    for split in folds + [test]:
+        logger.info("   %-5s train %s..%s (%d rows) | gap %d sessions | evaluate %s..%s (%d rows)", split.name,
+                    *split.train_period, len(split.train), split.gap_sessions, *split.eval_period, len(split.eval))
+
+    # 1. the frozen configuration on the walk-forward folds
+    fold_metrics, fold_summary, fold_ic = walk_forward(spec, panel, folds, horizon, device)
+    # 2. the final model: fit on every purged pre-test row, scored once on the test period
+    feature_checks = check_features(panel, test.train, spec.features, label_column(spec.target, horizon))
+    fitted, test_metrics, test_ic, predictions = score_split(spec, panel, test, horizon, device)
+    edge = edge_verdict(fold_metrics, test_metrics, pd.concat([fold_ic, test_ic]), days)
+    logger.info("   [test] AUC rel %.4f abs %.4f | rank IC %+.4f (t=%.2f) | top/bottom %.3f/%.3f | edge: %s",
+                test_metrics["auc_rel"], test_metrics["auc_abs"], test_metrics["rank_ic"],
+                test_metrics["rank_ic_tstat"], test_metrics["top_hit_rel"], test_metrics["bottom_hit_rel"],
+                "reliable" if edge["reliable"] else "none (" + "; ".join(edge["reasons"]) + ")")
+    alerts = leakage_alerts(horizon, fold_metrics, test_metrics)
+
+    # 3. the previous model through the same protocol (and what the deployed copy scored after seeing the test)
+    bundle_path = os.path.join(OUTPUT_DIR, f"model_{horizon}.pkl")
+    previous_deployed = (previous_model_on_test(bundle_path, panel, test, horizon)
+                         if os.path.exists(bundle_path) else None)
+    baseline, baseline_predictions = (evaluate_baseline(panel, horizon, folds, test, device) if with_baseline
+                                      else (None, None))
+    if baseline is not None:
+        carried = ((previous or {}).get("horizons", {}).get(horizon, {}).get("baseline") or {}
+                   if (previous or {}).get("schema_version") == 2 else {})
+        baseline["originally_reported"] = originally_reported(previous, horizon)
+        # Only measurable while the old bundle is still on disk; later runs carry the first measurement over
+        baseline["previous_deployed_model"] = previous_deployed or carried.get("previous_deployed_model")
+
+    backtests = run_backtests(panel, horizon, {"model": predictions, "baseline": baseline_predictions})
+    to_cpu(fitted)
+    report, shap_sample, corr = feature_report(fitted, spec, panel, test.train, horizon, fold_metrics)
+    probs, reference_date = reference_cross_section(fitted, panel)
+
+    now = datetime.now().isoformat(timespec="seconds")
+    bundle = {
+        "model": fitted.model, "features": fitted.columns, "raw_features": fitted.features,
+        "cross_sectional": spec.cross_sectional, "model_type": "xgboost", "library_version": xgboost.__version__,
+        "experiment": step, "target": spec.target, "target_description": TARGET_TEXT[spec.target],
+        "horizon_days": days,
+        "feature_groups": [g for g, cols in FEATURE_GROUPS.items() if set(cols) & set(fitted.features)],
+        "requirements": sorted(requirements_for(fitted.features)),
+        "reference_probs": probs.tolist(), "reference_date": f"{reference_date:%Y-%m-%d}",
+        "threshold": float(np.median(probs)), "train_period": list(test.train_period),
+        "test_period": list(test.eval_period), "trained_at": now, "random_state": RANDOM_STATE,
+    }
+    entry = {
+        "horizon_days": days, "target": spec.target, "target_description": TARGET_TEXT[spec.target],
+        "model": {"library": "xgboost", "version": xgboost.__version__, "experiment_step": step,
+                  "params": spec.params, "n_trees": fitted.info["n_trees"], "features": fitted.features,
+                  "n_features": len(fitted.features), "candidate_features": len(spec.features),
+                  "clear_move_k": spec.clear_move_k, "cross_sectional": spec.cross_sectional,
+                  "early_stopping": spec.early_stopping, "prune": spec.prune,
+                  "train_period": list(test.train_period), "train_rows": fitted.info["train_rows"],
+                  "trained_at": now},
+        "split": {"folds": [s.describe() for s in folds], "test": test.describe(), "checks": split_checks},
+        "feature_checks": feature_checks,
+        "folds": fold_metrics, "fold_summary": fold_summary,
+        "final_test": test_metrics, "edge": edge, "leakage_alerts": alerts,
+        "baseline": baseline,
+        "backtest": {name: {"metrics": r["metrics"], "benchmark": r["benchmark"], "config": r["config"]}
+                     for name, r in backtests.items()},
+    }
+    reports[f"backtest_{horizon}"] = entry["backtest"]
+    reports[f"equity_curve_{horizon}"] = backtests["model"]["equity_curve"]
+    if "baseline" in backtests:
+        reports[f"equity_curve_baseline_{horizon}"] = backtests["baseline"]["equity_curve"]
+    reports[f"feature_importance_{horizon}"] = report
+    reports[f"shap_sample_{horizon}"] = shap_sample
+    reports[f"correlation_{horizon}"] = corr
+    return bundle, entry
+
+
+# Output
+
+def _clean(value):
+    """JSON-safe copy: NaN/inf become null, numpy scalars become Python numbers."""
+    if isinstance(value, dict):
+        return {str(k): _clean(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_clean(v) for v in value]
+    if isinstance(value, (bool, np.bool_)):
+        return bool(value)
+    if isinstance(value, (np.floating, float)):
+        return float(value) if np.isfinite(value) else None
+    if isinstance(value, np.integer):
+        return int(value)
+    if isinstance(value, (pd.Timestamp, datetime)):
+        return value.isoformat()
+    return value
 
 
 def save_reports(reports):
@@ -421,68 +509,91 @@ def save_reports(reports):
             joblib.dump(value, os.path.join(REPORTS_DIR, f"{key}.pkl"), compress=3)
         else:
             with open(os.path.join(REPORTS_DIR, f"{key}.json"), "w", encoding="utf-8") as fh:
-                json.dump(value, fh, indent=2, default=str)
+                json.dump(_clean(value), fh, indent=2)
     logger.info("Reports written to %s (%d files)", REPORTS_DIR, len(reports))
 
 
-def generate_base_model(use_cache=True, rebuild_data=False, horizons=None, use_intraday=True, run_1h_study=True):
+def train(use_cache=True, rebuild_data=False, horizons=None, use_intraday=True, data_end=None, cpu=False,
+          with_baseline=True):
     setup_logging()
     np.random.seed(RANDOM_STATE)
     start = time.time()
-    logger.info("TradeFlow training run | sklearn=%s lightgbm=%s | seed=%d", sklearn.__version__, lgb.__version__,
+    device = detect_device("cpu" if cpu else "cuda")
+    horizons = [h for h in HORIZONS if not horizons or h in horizons]
+    missing = [h for h in horizons if h not in FINAL_SPECS]
+    if missing:
+        raise SystemExit(f"No frozen configuration for {missing}: run experiments.py and freeze the result in "
+                         "models/config.py FINAL_SPECS first.")
+    logger.info("TradeFlow training run | xgboost=%s | device=%s | seed=%d", xgboost.__version__, device,
                 RANDOM_STATE)
 
-    data = build_dataset(use_cache=use_cache, use_intraday=use_intraday, rebuild=rebuild_data)
-    if data is None:
-        logger.error("No valid data collected")
-        return
+    data, meta = build_dataset(use_cache=use_cache, use_intraday=use_intraday, rebuild=rebuild_data,
+                               data_end=data_end)
+    sources, _, frozen_end = load_context_sources(use_cache=True, data_end=meta["data_end"])
+    audit = run_leakage_audit(sources, frozen_end)
+    used = {f for h in horizons for f in FINAL_SPECS[h].features}
+    if used & set(audit["look_ahead_failures"]) or audit["intraday_alignment_problems"]:
+        raise RuntimeError(f"leakage audit failed: {audit}")
 
-    sources, prices = load_context_sources(use_cache)
-    audit, invalid_map = run_leakage_audit(sources)
+    rank_features = sorted({f for h in horizons if FINAL_SPECS[h].cross_sectional for f in FINAL_SPECS[h].features})
+    panel = prepare_panel(data, rank_features=rank_features)
+    previous = _read_json(METRICS_PATH)
+    steps = (_read_json(os.path.join(REPORTS_DIR, "experiments.json")) or {}).get("horizons", {})
+    for horizon in horizons:
+        recorded = steps.get(horizon, {}).get("final_spec")
+        if recorded is not None and not matches(FINAL_SPECS[horizon], recorded):
+            raise SystemExit(f"FINAL_SPECS['{horizon}'] in models/config.py differs from the configuration that "
+                             "experiments.py chose; re-run the experiments or fix the config before training.")
     reports = {"leakage_audit": audit}
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    summary = {}
-    for name, days in HORIZONS.items():
-        if horizons and name not in horizons:
-            continue
-        bundle, predictions, baseline_predictions = train_horizon(data, name, days, invalid_map, reports)
-        backtests = run_backtests(name, days, predictions, baseline_predictions, prices)
-        bundle["backtest"] = {k: {"metrics": v["metrics"], "benchmark": v["benchmark"], "config": v["config"]}
-                              for k, v in backtests.items()}
-        reports[f"backtest_{name}"] = bundle["backtest"]
-        reports[f"equity_curve_{name}"] = backtests["enhanced"]["equity_curve"]
-        reports[f"equity_curve_baseline_{name}"] = backtests["baseline"]["equity_curve"]
-        if run_1h_study:
-            run_intraday_study(data, name, days, reports)
+    entries, bundles = {}, {}
+    for horizon in horizons:
+        step = steps.get(horizon, {}).get("final_step", "frozen")
+        bundles[horizon], entries[horizon] = train_horizon(panel, horizon, FINAL_SPECS[horizon], step, device,
+                                                           previous, reports, with_baseline)
+    for horizon, bundle in bundles.items():
+        joblib.dump(bundle, os.path.join(OUTPUT_DIR, f"model_{horizon}.pkl"), compress=3)
+        logger.info("   [%s] saved model bundle (%s)", horizon, bundle["experiment"])
 
-        joblib.dump(bundle, os.path.join(OUTPUT_DIR, f"model_{name}.pkl"), compress=3)
-        summary[name] = {k: v for k, v in bundle.items()
-                         if k not in ("model", "components", "reference_probs", "selected_features")}
-        summary[name]["n_selected_features"] = len(bundle.get("selected_features") or [])
-        logger.info("   [%s] saved model bundle (%s)", name, bundle["experiment"])
-
-    metrics_path = os.path.join(OUTPUT_DIR, "metrics.json")
-    if horizons and os.path.exists(metrics_path):
-        # A run limited to some horizons keeps the other horizons' entries
-        try:
-            with open(metrics_path, encoding="utf-8") as fh:
-                summary = {**json.load(fh), **summary}
-        except (OSError, ValueError) as exc:
-            logger.warning("Could not merge the existing metrics.json (%s); writing this run only", exc)
-    with open(metrics_path, "w", encoding="utf-8") as fh:
-        json.dump(summary, fh, indent=2, default=str)
+    kept = previous.get("horizons", {}) if previous and previous.get("schema_version") == 2 else {}
+    metrics = {
+        "schema_version": 2,
+        "training_date": datetime.now().isoformat(timespec="seconds"),
+        "data": {k: meta.get(k) for k in ("source", "price_history_start", "data_start", "data_end", "stocks",
+                                          "rows")},
+        "protocol": {
+            "validation": f"purged walk-forward, {N_FOLDS} time-ordered folds, expanding training window",
+            "purge": "training rows are dated at least one label horizon before the evaluated block, and their "
+                     "label windows end before it starts",
+            "final_test": f"most recent {TEST_FRACTION:.0%} of labelled sessions per horizon, scored once after "
+                          "the configuration was frozen",
+            "first_validation_fraction": FIRST_VAL_FRACTION,
+            "edge_rule": f"rank IC > 0 on average and in >= {EDGE_MIN_POSITIVE_FOLDS} of {N_FOLDS} folds, > 0 on "
+                         f"the final test, and Newey-West t-stat >= {EDGE_MIN_TSTAT:.0f} over all out-of-sample days",
+        },
+        "device": device, "random_state": RANDOM_STATE, "xgboost_version": xgboost.__version__,
+        "leakage_audit": audit,
+        "horizons": {**kept, **entries},
+    }
+    with open(METRICS_PATH, "w", encoding="utf-8") as fh:
+        json.dump(_clean(metrics), fh, indent=2)
     save_reports(reports)
     logger.info("Done in %.1f minutes", (time.time() - start) / 60)
+    return metrics
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train TradeFlow models")
     parser.add_argument("--rebuild-data", action="store_true", help="rebuild the cached feature dataset")
     parser.add_argument("--no-cache", action="store_true", help="re-download price data")
-    parser.add_argument("--no-intraday", action="store_true", help="skip 1h intraday features")
-    parser.add_argument("--skip-1h-study", action="store_true", help="skip the 1h ablation study")
+    parser.add_argument("--no-intraday", action="store_true", help="skip 1h intraday features when rebuilding")
+    parser.add_argument("--data-end", help="freeze the dataset at this date (default: last cached NIFTY session)")
     parser.add_argument("--horizons", nargs="*", choices=list(HORIZONS), help="train only these horizons")
+    parser.add_argument("--cpu", action="store_true", help="train on the CPU even if a GPU is available")
+    parser.add_argument("--skip-baseline", action="store_true",
+                        help="do not re-evaluate the previous models (otherwise needs lightgbm)")
     args = parser.parse_args()
-    generate_base_model(use_cache=not args.no_cache, rebuild_data=args.rebuild_data, horizons=args.horizons,
-                        use_intraday=not args.no_intraday, run_1h_study=not args.skip_1h_study)
+    train(use_cache=not args.no_cache, rebuild_data=args.rebuild_data, horizons=args.horizons,
+          use_intraday=not args.no_intraday, data_end=args.data_end, cpu=args.cpu,
+          with_baseline=not args.skip_baseline)

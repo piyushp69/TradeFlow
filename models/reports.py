@@ -43,8 +43,8 @@ def load_pickle(name):
     return joblib.load(path) if os.path.exists(path) else None
 
 
-def feature_selection(horizon):
-    return load_table(f"feature_selection_{horizon}")
+def feature_importance(horizon):
+    return load_table(f"feature_importance_{horizon}")
 
 
 def experiments(horizon):
@@ -65,17 +65,6 @@ def backtest(horizon):
 
 def equity_curve(horizon, baseline=False):
     return load_table(f"equity_curve_baseline_{horizon}" if baseline else f"equity_curve_{horizon}")
-
-
-def predictions(horizon):
-    table = load_table(f"predictions_{horizon}")
-    if table is not None:
-        table["Date"] = pd.to_datetime(table["Date"])
-    return table
-
-
-def intraday_study(horizon):
-    return load_table(f"intraday_1h_study_{horizon}")
 
 
 def leakage_audit():

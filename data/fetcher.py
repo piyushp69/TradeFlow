@@ -49,8 +49,12 @@ def get_stock_data(ticker, period="10y"):
         return None
 
 
-def get_many_stocks(tickers, period="10y", use_cache=True):
-    """Download several tickers in one batch, caching each to disk for repeat training runs."""
+def get_many_stocks(tickers, period="10y", use_cache=True, write_cache=True):
+    """Download several tickers in one batch, caching each to disk for repeat training runs.
+
+    The app passes write_cache=False: fresh downloads for live forecasts must not overwrite the training cache,
+    otherwise viewing a ticker would silently change the data the next training run sees.
+    """
     os.makedirs(CACHE_DIR, exist_ok=True)
     result, missing = {}, []
 
@@ -70,7 +74,8 @@ def get_many_stocks(tickers, period="10y", use_cache=True):
             else:
                 df = None
             if df is not None:
-                df.to_pickle(os.path.join(CACHE_DIR, f"{ticker}.pkl"))
+                if write_cache:
+                    df.to_pickle(os.path.join(CACHE_DIR, f"{ticker}.pkl"))
                 result[ticker] = df
 
     logger.info("Daily data: %d/%d tickers loaded (%d downloaded)", len(result), len(tickers), len(missing))

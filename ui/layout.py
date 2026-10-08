@@ -14,7 +14,7 @@ DIRECTION_STYLE = {"UP": (UP_COLOR, "▲"), "DOWN": (DOWN_COLOR, "▼"), "NEUTRA
 
 POPULAR_TICKERS = [
     "TCS.NS", "RELIANCE.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS", "SBIN.NS",
-    "BHARTIARTL.NS", "ITC.NS", "LT.NS", "TATASTEEL.NS", "^NSEI",
+    "BHARTIARTL.NS", "ITC.NS", "LT.NS", "TATASTEEL.NS",
 ]
 
 RANGES = {"3M": 63, "6M": 126, "1Y": 252, "3Y": 756, "5Y": 1260, "Max": None}
@@ -88,12 +88,12 @@ def sidebar_controls():
     st.sidebar.markdown("---")
     st.sidebar.markdown("### About")
     st.sidebar.caption(
-        "Gradient-boosting models trained on ~180 NSE stocks with scale-free technical, trend and "
-        "market-context features chosen per horizon. Each horizon is backtested on a held-out, most-recent "
-        "time period."
+        "XGBoost models trained on 180 NSE stocks with scale-free technical, trend and market-context "
+        "features. Each horizon is validated on purged walk-forward folds and scored once on a held-out, "
+        "most recent test period. Horizons without a measurable out-of-sample edge show no call."
     )
-    st.sidebar.warning("Not financial advice. Predictions are based on historical patterns and are "
-                       "only slightly better than chance.", icon="⚠️")
+    st.sidebar.warning("Not financial advice. TradeFlow is a research project: any edge it has is small and "
+                       "uncertain, and past patterns may not repeat.", icon="⚠️")
     return (ticker or "").strip().upper(), run
 
 
@@ -108,7 +108,8 @@ def welcome():
     blocks = [
         ("📥 Live data", "10 years of daily prices from Yahoo Finance, plus NIFTY 50 market context."),
         ("🧮 Scale-free features", "Momentum, trend, oscillators, volatility, volume, market and sector context."),
-        ("🤖 3 horizons", "Weekly, monthly and yearly direction, each with honest backtest metrics."),
+        ("🤖 3 horizons", "Weekly, monthly and yearly forecasts, each scored out of sample on purged "
+                         "walk-forward folds and a held-out test period."),
     ]
     for col, (title, text) in zip((c1, c2, c3), blocks):
         col.markdown(f'<div class="stat-card"><p class="stat-value">{title}</p>'
@@ -157,27 +158,57 @@ def stats_row(raw):
                      f'<p class="stat-value">{value}</p></div>', unsafe_allow_html=True)
 
 
+NO_EDGE_COLOR = "#6b7384"
+HORIZON_LABELS = (("weekly", "Weekly"), ("monthly", "Monthly"), ("yearly", "Yearly"))
+
+
+def _num(value, fmt):
+    return "—" if value is None or pd.isna(value) else format(value, fmt)
+
+
+def _test_line(test):
+    period = " → ".join(test.get("period") or []) or "n/a"
+    return (f"Test period {period}: rank IC {_num(test.get('rank_ic'), '+.3f')} "
+            f"(t {_num(test.get('rank_ic_tstat'), '.1f')}), AUC {_num(test.get('auc_rel'), '.3f')}")
+
+
 def forecast_card(label, horizon_text, res):
+    evaluation = res.get("evaluation") or {}
+    test = evaluation.get("final_test") or {}
+    edge = evaluation.get("edge") or {}
+    if not res.get("reliable"):
+        reasons = "; ".join(edge.get("reasons") or []) or "no out-of-sample evaluation found"
+        _html(f"""
+            <div class="pred-card" style="--accent:{NO_EDGE_COLOR}">
+                <div class="card-head">
+                    <p class="card-label">{label}</p><span class="card-horizon">{horizon_text}</span>
+                </div>
+                <p class="card-trend" style="font-size:24px">○ NO RELIABLE EDGE</p>
+                <p class="card-conf">Out-of-sample tests found no consistent signal at this horizon, so TradeFlow
+                   makes no call.</p>
+                <p class="card-meta">Why: {html.escape(reasons)}.<br>{_test_line(test)}</p>
+            </div>
+        """)
+        return
+
     accent, icon = DIRECTION_STYLE[res["direction"]]
-    prob = res["up_probability"]
     rank = res.get("percentile") or 0
-    metrics = res.get("test_metrics", {})
+    outcome = "beat the median stock" if res.get("target") == "relative" else "rise more than 0.5%"
     _html(f"""
         <div class="pred-card" style="--accent:{accent}">
             <div class="card-head">
                 <p class="card-label">{label}</p><span class="card-horizon">{horizon_text}</span>
             </div>
-            <p class="card-trend">{icon} {res['direction']}</p>
-            <p class="card-conf">P(UP) {prob:.1f}% vs universe median {res['threshold'] * 100:.1f}%</p>
+            <p class="card-trend">{icon} {res['label']}</p>
+            <p class="card-conf">Scores above {rank:.0f}% of the NSE universe · model P({outcome}) {res['probability']:.1f}%</p>
             <div class="prob-track">
                 <div class="prob-fill" style="width:{rank:.1f}%"></div>
                 <div class="prob-mark" style="left:40%"></div>
                 <div class="prob-mark" style="left:60%"></div>
             </div>
-            <div class="prob-legend"><span>Ranks above {rank:.0f}% of NSE universe</span><span>markers = neutral zone</span></div>
-            <p class="card-meta">Test AUC {metrics.get('roc_auc', 0):.3f} ·
-               top-quintile hit rate {metrics.get('up_rate_top_quintile', 0):.1%}
-               vs {metrics.get('up_rate_bottom_quintile', 0):.1%} bottom</p>
+            <div class="prob-legend"><span>rank in the universe</span><span>markers = neutral zone</span></div>
+            <p class="card-meta">{_test_line(test)} · top vs bottom quintile beat the median
+               {_num(test.get('top_hit_rel'), '.1%')} vs {_num(test.get('bottom_hit_rel'), '.1%')}</p>
         </div>
     """)
 
@@ -206,43 +237,6 @@ def technical_signals(latest):
         rows.append(row("3M return vs NIFTY 50", _pct(latest["Rel_Ret_63"]),
                         "Outperforming" if latest["Rel_Ret_63"] > 0 else "Underperforming", latest["Rel_Ret_63"] > 0))
     st.markdown("".join(rows), unsafe_allow_html=True)
-
-
-def model_insights(results):
-    rows = []
-    for key, label in (("weekly", "Weekly"), ("monthly", "Monthly"), ("yearly", "Yearly")):
-        if key not in results:
-            continue
-        m = results[key].get("test_metrics", {})
-        rows.append({
-            "Horizon": label,
-            "ROC AUC": m.get("roc_auc"),
-            "Balanced accuracy": m.get("balanced_accuracy"),
-            "UP rate: top 20% ranked": m.get("up_rate_top_quintile"),
-            "UP rate: bottom 20% ranked": m.get("up_rate_bottom_quintile"),
-            "UP rate: all stocks": m.get("up_rate"),
-            "Test rows": m.get("rows"),
-            "Test period": " -> ".join(results[key].get("test_period") or []),
-        })
-    pct = st.column_config.NumberColumn(format="percent")
-    st.dataframe(
-        pd.DataFrame(rows), hide_index=True, width="stretch",
-        column_config={
-            "ROC AUC": st.column_config.NumberColumn(format="%.3f"),
-            "Balanced accuracy": pct,
-            "UP rate: top 20% ranked": pct,
-            "UP rate: bottom 20% ranked": pct,
-            "UP rate: all stocks": pct,
-        },
-    )
-    st.caption(
-        "Metrics come from the most recent period of data, which the models never saw during training or tuning. "
-        "ROC AUC of 0.50 is a coin flip. Values in the 0.52–0.56 range are typical for daily-price-based models "
-        "and mean the signal is weak.  \n**How to read a forecast:** the model ranks the stock against ~180 NSE stocks. "
-        "It is UP when it ranks in the top 40%, DOWN in the bottom 40%, and NEUTRAL in between, so a forecast is relative: "
-        "in a falling market, even top-ranked stocks can decline. \"UP\" means the price is more than 0.5% higher "
-        "at the end of the horizon."
-    )
 
 
 # ---------------------------------------------------------------- market context
@@ -363,149 +357,184 @@ def timeframe_section(snapshot, meta, model_timeframes):
                    ", ".join(f"{TIMEFRAME_LABELS.get(k, k)} ending {pd.Timestamp(v):%d %b %H:%M}"
                              for k, v in sorted(last_bars.items())))
     st.info("Yahoo Finance serves only ~60 days of 5m/15m bars and ~2 years of 1h bars, so those timeframes "
-            "cannot be computed across the 10-year training history. They are shown here as live context; "
-            "the **Model Performance** tab reports a separate study of whether 1h features help.", icon="ℹ️")
+            "cannot be computed across the 10-year training history. They are shown here as live context "
+            "only; the models use daily features.", icon="ℹ️")
 
 
 # ---------------------------------------------------------------- feature analysis
 
 def feature_analysis_section(horizon):
-    report = reports.feature_selection(horizon)
+    report = reports.feature_importance(horizon)
     if report is None:
-        st.info("No feature-analysis reports yet. Run `python trainer.py` to generate them.")
+        st.info("No feature reports yet. Run `python trainer.py` to generate them.")
         return
 
-    selected = report[report["selected"]]
+    used = report[report["used"]]
     c1, c2, c3 = st.columns(3)
     c1.metric("Candidate features", len(report))
-    c2.metric("Selected", int(report["selected"].sum()))
-    c3.metric("Removed", int((~report["selected"]).sum()))
+    c2.metric("Used by the model", len(used))
+    c3.metric("Pruned", int((~report["used"]).sum()))
 
-    tabs = st.tabs(["SHAP", "Model importance", "Mutual information", "Permutation", "Correlation", "Full report"])
+    tabs = st.tabs(["SHAP", "Gain importance", "Single-feature IC", "Correlation", "Full table"])
     with tabs[0]:
         left, right = st.columns([1, 1])
-        left.plotly_chart(visuals.plot_importance(report, "shap_importance", color="#c084fc",
-                                                  title="Mean |SHAP| (validation folds)"), width="stretch")
+        left.plotly_chart(visuals.plot_importance(used, "shap_importance", color="#c084fc",
+                                                  title="Mean |SHAP|"), width="stretch")
         right.plotly_chart(visuals.plot_shap_beeswarm(reports.shap_sample(horizon)), width="stretch")
-        st.caption("SHAP values come from LightGBM's exact TreeSHAP on validation rows the model did not train on.")
+        st.caption("XGBoost TreeSHAP of the deployed model on a sample of its own training rows: how the model "
+                   "uses each feature, not evidence that the feature predicts returns.")
     with tabs[1]:
-        left, right = st.columns(2)
-        left.plotly_chart(visuals.plot_importance(report, "model_importance_gain", color="#00d68f",
-                                                  title="Gain importance"), width="stretch")
-        right.plotly_chart(visuals.plot_importance(report, "model_importance_split", color="#7dd3fc",
-                                                   title="Split importance"), width="stretch")
+        st.plotly_chart(visuals.plot_importance(used, "gain_share", color="#00d68f",
+                                                title="Share of total split gain"), width="stretch")
     with tabs[2]:
-        st.plotly_chart(visuals.plot_importance(report, "mutual_information", color="#fbbf24",
-                                                title="Mutual information with the target"), width="stretch")
-    with tabs[3]:
-        st.plotly_chart(visuals.plot_importance(report, "permutation_importance", color="#ff4d5e",
-                                                title="Permutation importance (AUC drop, validation folds)"),
+        st.plotly_chart(visuals.plot_importance(report.assign(abs_ic=report["single_feature_rank_ic"].abs()),
+                                                "abs_ic", color="#fbbf24",
+                                                title="|Rank IC| of each feature alone (training period)"),
                         width="stretch")
-        st.caption("Measured out-of-sample: each feature is shuffled in the validation block and the loss of "
-                   "ROC AUC is recorded. Negative values mean the feature was not helping there.")
-    with tabs[4]:
-        top = selected.nlargest(20, "shap_importance")["feature"].tolist() if not selected.empty else []
+        st.caption("Daily Spearman correlation between the feature and the forward return across stocks, "
+                   "averaged over the training period. The sign is in the full table.")
+    with tabs[3]:
+        top = used.nlargest(20, "shap_importance")["feature"].tolist() if not used.empty else []
         st.plotly_chart(visuals.plot_correlation_heatmap(reports.correlation(horizon), top), width="stretch")
-        redundant = report[report["removal_reason"].astype(str).str.startswith("redundant")]
-        if not redundant.empty:
-            st.caption("Dropped as redundant: " +
-                       "; ".join(f"{r.feature} ({r.removal_reason})" for r in redundant.itertuples()))
-    with tabs[5]:
+    with tabs[4]:
         st.dataframe(report, hide_index=True, width="stretch")
-        st.caption("`selected` is decided by agreement between mutual information, gain, permutation and SHAP "
-                   "rankings; no single method removes a feature on its own.")
+        st.caption("`kept_in_folds`: share of walk-forward folds in which pruning kept the feature "
+                   "(1.0 when pruning is off).")
 
 
 # ---------------------------------------------------------------- model performance
 
-def _metrics_table(results, key, caption):
-    rows = []
-    for horizon, label in (("weekly", "Weekly"), ("monthly", "Monthly"), ("yearly", "Yearly")):
-        if horizon not in results:
-            continue
-        metrics = results[horizon].get(key) or {}
-        if not metrics:
-            continue
-        rows.append({"Horizon": label, **{k.replace("_", " ").capitalize(): v for k, v in metrics.items()}})
-    if not rows:
-        return
-    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
-    st.caption(caption)
+def _mean_std(summary, key, fmt=".3f"):
+    stats = (summary or {}).get(key) or {}
+    if stats.get("mean") is None:
+        return "—"
+    if stats.get("std") is None:
+        return format(stats["mean"], fmt)
+    return f"{format(stats['mean'], fmt)} ± {format(stats['std'], fmt.lstrip('+'))}"
 
 
-def model_performance_section(results, horizon_choice):
-    st.markdown("##### Chosen model per horizon")
-    rows = []
-    for horizon, label in (("weekly", "Weekly"), ("monthly", "Monthly"), ("yearly", "Yearly")):
-        if horizon not in results:
-            continue
-        res = results[horizon]
-        rows.append({"Horizon": label, "Model": res.get("experiment"), "Type": res.get("model_type"),
-                     "Features": res.get("n_features"), "Validation AUC": res.get("cv_auc"),
-                     "Test AUC": (res.get("test_metrics") or {}).get("roc_auc"),
-                     "Test period": " -> ".join(res.get("test_period") or [])})
-    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
-
-    st.markdown("##### Test metrics (held-out period, never used for tuning)")
-    _metrics_table(results, "test_metrics",
-                   "Directional accuracy, precision, recall and F1 use the same-day median split. ROC AUC of 0.50 "
-                   "is a coin flip. MAE/R2 do not apply to a direction model, so the Brier score and the RMSE of "
-                   "the probability are given instead.")
-
-    st.markdown("##### Baseline vs enhanced experiments")
-    table = reports.experiments(horizon_choice)
-    if table is None:
-        st.info("Run `python trainer.py` to generate the experiment comparison.")
-    else:
-        show = [c for c in ["experiment", "model", "n_features", "cv_auc", "test_roc_auc",
-                            "test_directional_accuracy", "test_up_rate_top_quintile",
-                            "test_up_rate_bottom_quintile", "test_brier_score"] if c in table]
-        st.dataframe(table[show], hide_index=True, width="stretch")
-        st.caption("The model is chosen by validation (`cv_auc`) only; the test column is reported afterwards.")
-
-    study = reports.intraday_study(horizon_choice)
-    if study is not None:
-        st.markdown("##### 1-hour timeframe study")
-        show = [c for c in ["variant", "n_features", "cv_auc", "test_roc_auc", "test_directional_accuracy"]
-                if c in study]
-        st.dataframe(study[show], hide_index=True, width="stretch")
-        st.caption("Run only on the window where 1h bars exist (~2 years), so it is separate from the main "
-                   "model choice.")
-
-    st.markdown("##### Backtest")
-    backtest_data = reports.backtest(horizon_choice)
-    if not backtest_data:
-        st.info("Run `python trainer.py` to generate backtest results.")
-        return
-    enhanced = backtest_data.get("enhanced", {})
-    metrics, benchmark = enhanced.get("metrics", {}), enhanced.get("benchmark", {})
-    baseline_metrics = backtest_data.get("baseline", {}).get("metrics", {})
+def performance_overview(metrics):
+    """Headline tables for every horizon, read from models/saved_models/metrics.json."""
     if not metrics:
-        st.warning("Not enough non-overlapping periods in the test window to backtest this horizon.")
+        st.info("No evaluation results found. Run `python trainer.py` to train and evaluate the models.")
         return
+    data, protocol = metrics.get("data") or {}, metrics.get("protocol") or {}
+    st.caption(f"Trained {str(metrics.get('training_date', ''))[:10]} on {data.get('stocks')} NSE stocks, "
+               f"daily data {data.get('data_start')} → {data.get('data_end')} ({data.get('source')}). "
+               f"Validation: {protocol.get('validation')}; {protocol.get('purge')}. "
+               f"Final test: {protocol.get('final_test')}.")
 
-    cols = st.columns(5)
-    _tile(cols[0], "Cumulative return", _fmt(metrics.get("cumulative_return")),
-          f"benchmark {_fmt(benchmark.get('cumulative_return'))}")
-    _tile(cols[1], "Sharpe ratio", _fmt(metrics.get("sharpe_ratio"), "raw"))
-    _tile(cols[2], "Max drawdown", _fmt(metrics.get("max_drawdown")))
-    _tile(cols[3], "Win rate", _fmt(metrics.get("win_rate"), "pct_abs"),
-          f"{metrics.get('number_of_trades')} trades")
-    _tile(cols[4], "Profit factor", _fmt(metrics.get("profit_factor"), "raw"),
-          f"existing model {_fmt(baseline_metrics.get('cumulative_return'))}")
+    test_rows, fold_rows, compare_rows = [], [], []
+    for key, label in HORIZON_LABELS:
+        entry = (metrics.get("horizons") or {}).get(key)
+        if not entry:
+            continue
+        test, edge, summary = entry["final_test"], entry["edge"], entry["fold_summary"]
+        test_rows.append({
+            "Horizon": label, "Test period": " → ".join(test["period"]), "Rank IC": test["rank_ic"],
+            "IC t-stat": test.get("rank_ic_tstat"), "AUC (beat median)": test["auc_rel"],
+            "AUC (UP > 0.5%)": test["auc_abs"], "Top 20% beat median": test["top_hit_rel"],
+            "Bottom 20% beat median": test["bottom_hit_rel"],
+            "Edge": "reliable" if edge.get("reliable") else "none"})
+        fold_rows.append({
+            "Horizon": label, "Rank IC": _mean_std(summary, "rank_ic", "+.4f"),
+            "Folds with IC > 0": f"{summary.get('positive_ic_folds')}/{summary.get('n_folds')}",
+            "AUC (beat median)": _mean_std(summary, "auc_rel"), "AUC (UP > 0.5%)": _mean_std(summary, "auc_abs"),
+            "Top / bottom 20% beat median": f"{summary['top_hit_rel']['mean']:.1%} / "
+                                            f"{summary['bottom_hit_rel']['mean']:.1%}"})
+        baseline = entry.get("baseline") or {}
+        reported = baseline.get("originally_reported") or {}
+        before = baseline.get("final_test") or {}
+        compare_rows.append({
+            "Horizon": label, "Previously reported test AUC": reported.get("test_auc"),
+            "Previous model, new protocol: AUC (UP)": before.get("auc_abs"),
+            "Previous model: rank IC": before.get("rank_ic"),
+            "New model: AUC (UP)": test["auc_abs"], "New model: AUC (beat median)": test["auc_rel"],
+            "New model: rank IC": test["rank_ic"]})
 
-    st.plotly_chart(visuals.plot_equity_curve(reports.equity_curve(horizon_choice),
-                                              reports.equity_curve(horizon_choice, baseline=True)), width="stretch")
-    config = enhanced.get("config", {})
-    st.caption(
-        f"Long-only, equal weight, top {config.get('top_quantile', 0.2):.0%} of the universe by P(UP), "
-        f"rebalanced every {config.get('rebalance_days')} sessions, filled at the next session's open with "
-        f"{config.get('transaction_cost_bps')} bps costs + {config.get('slippage_bps')} bps slippage. "
-        "Periods count: " f"{metrics.get('periods')}. The universe is today's stock list, so results carry "
-        "survivorship bias; the benchmark shares it, which makes the difference the meaningful part."
-    )
+    three = st.column_config.NumberColumn(format="%.3f")
+    four = st.column_config.NumberColumn(format="%+.4f")
+    pct = st.column_config.NumberColumn(format="percent")
+    st.markdown("##### Final test period (held out, scored once)")
+    st.dataframe(pd.DataFrame(test_rows), hide_index=True, width="stretch", column_config={
+        "Rank IC": four, "IC t-stat": st.column_config.NumberColumn(format="%.2f"), "AUC (beat median)": three,
+        "AUC (UP > 0.5%)": three, "Top 20% beat median": pct, "Bottom 20% beat median": pct})
+    st.caption(f"Edge rule, fixed before the test period was scored: {protocol.get('edge_rule')}. Rank IC is the "
+               "daily Spearman correlation between the model score and the realised forward return across stocks. "
+               "AUC 0.50 and IC 0 are a coin flip.")
+    st.markdown("##### Walk-forward validation (5 purged folds, mean ± std)")
+    st.dataframe(pd.DataFrame(fold_rows), hide_index=True, width="stretch")
+    st.markdown("##### Before and after")
+    st.dataframe(pd.DataFrame(compare_rows), hide_index=True, width="stretch", column_config={
+        "Previously reported test AUC": three, "Previous model, new protocol: AUC (UP)": three,
+        "Previous model: rank IC": four, "New model: AUC (UP)": three, "New model: AUC (beat median)": three,
+        "New model: rank IC": four})
+    st.caption("\"Previously reported\" is the old pipeline's own test score (4 folds, NIFTY index in the test set, "
+               "weekly features selected on the validation folds). \"New protocol\" re-scores that same model "
+               "configuration with the purged walk-forward split on the same test period.")
 
-    audit = reports.leakage_audit()
+
+def model_performance_section(metrics, horizon_choice):
+    entry = ((metrics or {}).get("horizons") or {}).get(horizon_choice)
+    if not entry:
+        st.info("No evaluation results for this horizon.")
+        return
+    edge, model = entry["edge"], entry["model"]
+
+    st.markdown("##### Walk-forward folds")
+    rows = [{"Fold": m["fold"], "Train": " → ".join(m["train_period"]), "Validate": " → ".join(m["period"]),
+             "Gap (sessions)": m["gap_sessions"], "Rank IC": m["rank_ic"], "IC (next-open entry)": m["rank_ic_open"],
+             "AUC (beat median)": m["auc_rel"], "AUC (UP)": m["auc_abs"], "Top 20% beat median": m["top_hit_rel"],
+             "Bottom 20% beat median": m["bottom_hit_rel"]} for m in entry["folds"]]
+    test = entry["final_test"]
+    rows.append({"Fold": "final test", "Train": " → ".join(model["train_period"]), "Validate": " → ".join(test["period"]),
+                 "Gap (sessions)": entry["split"]["test"]["gap_sessions"], "Rank IC": test["rank_ic"],
+                 "IC (next-open entry)": test["rank_ic_open"], "AUC (beat median)": test["auc_rel"],
+                 "AUC (UP)": test["auc_abs"], "Top 20% beat median": test["top_hit_rel"],
+                 "Bottom 20% beat median": test["bottom_hit_rel"]})
+    three, pct = st.column_config.NumberColumn(format="%.3f"), st.column_config.NumberColumn(format="percent")
+    four = st.column_config.NumberColumn(format="%+.4f")
+    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch", column_config={
+        "Rank IC": four, "IC (next-open entry)": four, "AUC (beat median)": three, "AUC (UP)": three,
+        "Top 20% beat median": pct, "Bottom 20% beat median": pct})
+    st.caption("Each fold trains only on rows whose labels end before the fold starts, with a gap of at least "
+               "the horizon. \"Next-open entry\" measures the same forecast against the return from the next "
+               "session's open, which is what a trader acting on the close could capture.")
+
+    st.markdown("##### Edge check")
+    checks = edge.get("checks") or {}
+    names = {"folds": "Positive rank IC in most walk-forward folds", "test": "Positive rank IC on the final test",
+             "significance": "Out-of-sample IC statistically significant"}
+    for key, text in names.items():
+        st.markdown(f"{'✅' if checks.get(key) else '❌'} {text}")
+    st.caption(f"Out-of-sample IC {edge.get('oos_ic_mean', 0):+.4f} over {edge.get('oos_days')} days, Newey-West "
+               f"t-stat {_num(edge.get('oos_ic_tstat'), '.2f')}. Verdict: "
+               f"{'reliable edge' if edge.get('reliable') else 'no reliable edge, so the app makes no call'}.")
+
+    st.markdown("##### Model")
+    st.markdown(f"XGBoost {model.get('version')} · target: {entry['target_description']} · "
+                f"{model['n_features']} features ({model.get('candidate_features')} candidates) · "
+                f"{model['n_trees']} trees · trained on {model['train_rows']:,} rows, "
+                f"{' → '.join(model['train_period'])} · experiment step {model.get('experiment_step')}")
+    with st.expander("Hyper-parameters and features"):
+        st.json({"params": model["params"], "clear_move_k": model.get("clear_move_k"),
+                 "cross_sectional": model.get("cross_sectional"), "early_stopping": model.get("early_stopping"),
+                 "prune": model.get("prune"), "features": model["features"]})
+
+    log = reports.experiments(horizon_choice)
+    if log is not None:
+        st.markdown("##### Experiment log (walk-forward folds only)")
+        show = [c for c in ["step", "change", "rank_ic_mean", "rank_ic_std", "ic_by_fold", "auc_rel_mean",
+                            "auc_abs_mean", "vs_reference", "decision"] if c in log]
+        st.dataframe(log[show], hide_index=True, width="stretch", column_config={
+            "rank_ic_mean": four, "rank_ic_std": st.column_config.NumberColumn(format="%.4f"),
+            "auc_rel_mean": three, "auc_abs_mean": three})
+        st.caption("A change was kept only if mean rank IC improved, IC improved in at least 4 of 5 folds and mean "
+                   "AUC (beat median) did not fall. The final test period played no part in these decisions.")
+
+    backtest_section(entry, horizon_choice)
+
+    audit = metrics.get("leakage_audit") or {}
     if audit:
         failures = audit.get("look_ahead_failures") or []
         alignment = audit.get("intraday_alignment_problems") or {}
@@ -513,11 +542,41 @@ def model_performance_section(results, horizon_choice):
             st.error(f"Leakage audit found problems: {failures} {alignment}")
         else:
             st.success(f"Leakage audit: {audit.get('features_checked')} features rebuilt point-in-time on "
-                       f"{', '.join(audit.get('stocks_checked', []))} with no look-ahead differences.", icon="✅")
+                       f"{', '.join(audit.get('stocks_checked', []))} with no look-ahead differences; every "
+                       "split re-checked for label overlap before training.", icon="✅")
+
+
+def backtest_section(entry, horizon):
+    st.markdown("##### Backtest on the final test period")
+    backtests = entry.get("backtest") or {}
+    result = backtests.get("model") or {}
+    metrics, benchmark, config = result.get("metrics") or {}, result.get("benchmark") or {}, result.get("config") or {}
+    if not metrics:
+        st.warning("Not enough non-overlapping periods in the test window to backtest this horizon.")
+        return
+    previous = (backtests.get("baseline") or {}).get("metrics") or {}
+    cols = st.columns(5)
+    _tile(cols[0], "Cumulative return", _fmt(metrics.get("cumulative_return")),
+          f"benchmark {_fmt(benchmark.get('cumulative_return'))}")
+    _tile(cols[1], "Sharpe ratio", _fmt(metrics.get("sharpe_ratio"), "raw"))
+    _tile(cols[2], "Max drawdown", _fmt(metrics.get("max_drawdown")))
+    _tile(cols[3], "Win rate", _fmt(metrics.get("win_rate"), "pct_abs"), f"{metrics.get('number_of_trades')} trades")
+    _tile(cols[4], "Profit factor", _fmt(metrics.get("profit_factor"), "raw"),
+          f"previous model {_fmt(previous.get('cumulative_return'))}" if previous else None)
+    st.plotly_chart(visuals.plot_equity_curve(reports.equity_curve(horizon),
+                                              reports.equity_curve(horizon, baseline=True)), width="stretch")
+    note = " A single rebalance is an anecdote, not evidence." if metrics.get("periods", 0) < 6 else ""
+    st.caption(
+        f"Long-only, equal weight, top {config.get('top_quantile', 0.2):.0%} of the universe by model score, "
+        f"rebalanced every {config.get('rebalance_days')} sessions, filled at the next session's open with "
+        f"{config.get('transaction_cost_bps')} bps costs + {config.get('slippage_bps')} bps slippage, over "
+        f"{metrics.get('periods')} periods.{note} The universe is today's stock list, so absolute returns carry "
+        "survivorship bias; the equal-weight benchmark shares it, so the difference is the meaningful part. "
+        "Shown for every horizon, including those without a reliable edge.")
 
 
 def explanation_section(results):
-    """Per-prediction SHAP explanation for each horizon (LightGBM models only)."""
+    """Per-prediction SHAP explanation, only for horizons with a reliable edge (no call, nothing to explain)."""
     available = {h: r for h, r in results.items() if r.get("explanation")}
     if not available:
         return

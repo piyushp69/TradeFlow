@@ -31,7 +31,7 @@ def build_live_context(ticker):
         if index_df is not None:
             index_prices[index_ticker] = index_df
     elif peers:
-        prices = get_many_stocks(peers, use_cache=False)
+        prices = get_many_stocks(peers, use_cache=False, write_cache=False)
 
     context = MarketContext(nifty=load_nifty_data(), vix=load_india_vix(), usdinr=load_usdinr_data(),
                             sector_panel=SectorPanel(prices, index_prices))

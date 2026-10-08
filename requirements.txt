@@ -5,4 +5,6 @@ numpy
 plotly
 joblib
 scikit-learn
-lightgbm
+# Pinned: the saved models are pickled XGBoost estimators. The same wheel trains on an NVIDIA GPU (CUDA) when one
+# is present and runs on the CPU everywhere else, including Streamlit Community Cloud.
+xgboost==3.4.1

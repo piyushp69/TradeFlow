@@ -197,14 +197,14 @@ def plot_shap_beeswarm(sample, top_n=12):
 def plot_shap_explanation(explanation):
     """Per-prediction SHAP contributions for the ticker on screen."""
     if not explanation:
-        return _empty("Per-prediction explanations require a LightGBM model")
+        return _empty("No explanation: this horizon makes no call")
     data = sorted(explanation, key=lambda e: e["shap_value"])
     colors = [UP_COLOR if e["shap_value"] > 0 else DOWN_COLOR for e in data]
     labels = [f"{e['feature']} = {e['value']:.3g}" for e in data]
     fig = go.Figure(go.Bar(x=[e["shap_value"] for e in data], y=labels, orientation="h", marker_color=colors))
     fig.add_vline(x=0, line=dict(color="#4b5563", width=1))
     fig.update_layout(yaxis=dict(automargin=True))
-    fig.update_xaxes(title_text="pushes P(UP) down  <->  pushes P(UP) up",
+    fig.update_xaxes(title_text="pushes the score down  <->  pushes the score up",
                      title_font=dict(size=11, color="#8b93a3"))
     return _base_layout(fig, max(280, 34 * len(data)))
 
@@ -234,6 +234,6 @@ def plot_equity_curve(curve, baseline_curve=None):
                                  name="Equal-weight universe", line=dict(color="#7dd3fc", width=1.6, dash="dot")))
     if baseline_curve is not None and not baseline_curve.empty:
         fig.add_trace(go.Scatter(x=pd.to_datetime(baseline_curve["Date"]), y=baseline_curve["equity"],
-                                 name="Existing model", line=dict(color="#fbbf24", width=1.4)))
+                                 name="Previous model", line=dict(color="#fbbf24", width=1.4)))
     fig.update_yaxes(title_text="Portfolio value (INR)", title_font=dict(size=11, color="#8b93a3"))
     return _base_layout(fig, 360, showlegend=True)
