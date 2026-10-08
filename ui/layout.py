@@ -166,29 +166,60 @@ def _num(value, fmt):
     return "—" if value is None or pd.isna(value) else format(value, fmt)
 
 
-def _test_line(test):
+MIN_INDEPENDENT_PERIODS = 10
+
+
+def _tstat_text(test, horizon_days):
+    """The IC t-stat, unless the period holds too few non-overlapping horizons for it to mean anything."""
+    periods = (test.get("days") or 0) / max(horizon_days or 1, 1)
+    if periods < MIN_INDEPENDENT_PERIODS:
+        return f"t-stat n/a: only {periods:.1f} non-overlapping periods"
+    return f"t {_num(test.get('rank_ic_tstat'), '.1f')}"
+
+
+def _test_line(test, horizon_days=None):
     period = " → ".join(test.get("period") or []) or "n/a"
     return (f"Test period {period}: rank IC {_num(test.get('rank_ic'), '+.3f')} "
-            f"(t {_num(test.get('rank_ic_tstat'), '.1f')}), AUC {_num(test.get('auc_rel'), '.3f')}")
+            f"({_tstat_text(test, horizon_days)}), AUC {_num(test.get('auc_rel'), '.3f')}")
+
+
+def _muted_card(label, horizon_text, title, text, meta):
+    _html(f"""
+        <div class="pred-card" style="--accent:{NO_EDGE_COLOR}">
+            <div class="card-head">
+                <p class="card-label">{label}</p><span class="card-horizon">{horizon_text}</span>
+            </div>
+            <p class="card-trend" style="font-size:24px">○ {title}</p>
+            <p class="card-conf">{text}</p>
+            <p class="card-meta">{meta}</p>
+        </div>
+    """)
+
+
+def _backtest_line(evaluation):
+    result = (evaluation.get("backtest") or {}).get("model") or {}
+    metrics, benchmark = result.get("metrics") or {}, result.get("benchmark") or {}
+    if not metrics:
+        return ""
+    return (f"<br>Test-period backtest, top 20% after costs: {_fmt(metrics.get('cumulative_return'))} vs "
+            f"{_fmt(benchmark.get('cumulative_return'))} for the equal-weight universe")
 
 
 def forecast_card(label, horizon_text, res):
     evaluation = res.get("evaluation") or {}
     test = evaluation.get("final_test") or {}
     edge = evaluation.get("edge") or {}
-    if not res.get("reliable"):
+    if res["direction"] == "NO_EDGE":
         reasons = "; ".join(edge.get("reasons") or []) or "no out-of-sample evaluation found"
-        _html(f"""
-            <div class="pred-card" style="--accent:{NO_EDGE_COLOR}">
-                <div class="card-head">
-                    <p class="card-label">{label}</p><span class="card-horizon">{horizon_text}</span>
-                </div>
-                <p class="card-trend" style="font-size:24px">○ NO RELIABLE EDGE</p>
-                <p class="card-conf">Out-of-sample tests found no consistent signal at this horizon, so TradeFlow
-                   makes no call.</p>
-                <p class="card-meta">Why: {html.escape(reasons)}.<br>{_test_line(test)}</p>
-            </div>
-        """)
+        _muted_card(label, horizon_text, "NO RELIABLE EDGE",
+                    "Out-of-sample tests found no consistent signal at this horizon, so TradeFlow makes no call.",
+                    f"Why: {html.escape(reasons)}.<br>{_test_line(test, evaluation.get('horizon_days'))}")
+        return
+    if res["direction"] == "NO_RANK":
+        _muted_card(label, horizon_text, "RANK UNAVAILABLE",
+                    "This horizon's calls rank the stock against the whole universe on the same session, and "
+                    "that data could not be loaded right now. Try again later.",
+                    html.escape(res.get("rank_basis") or ""))
         return
 
     accent, icon = DIRECTION_STYLE[res["direction"]]
@@ -199,16 +230,17 @@ def forecast_card(label, horizon_text, res):
             <div class="card-head">
                 <p class="card-label">{label}</p><span class="card-horizon">{horizon_text}</span>
             </div>
-            <p class="card-trend">{icon} {res['label']}</p>
-            <p class="card-conf">Scores above {rank:.0f}% of the NSE universe · model P({outcome}) {res['probability']:.1f}%</p>
+            <p class="card-trend" style="font-size:26px">{icon} {res['label']}</p>
+            <p class="card-conf">Ranks above {rank:.0f}% of the universe ({html.escape(res.get('rank_basis') or '')})
+               · model P({outcome}) {res['probability']:.1f}%</p>
             <div class="prob-track">
                 <div class="prob-fill" style="width:{rank:.1f}%"></div>
                 <div class="prob-mark" style="left:40%"></div>
                 <div class="prob-mark" style="left:60%"></div>
             </div>
-            <div class="prob-legend"><span>rank in the universe</span><span>markers = neutral zone</span></div>
-            <p class="card-meta">{_test_line(test)} · top vs bottom quintile beat the median
-               {_num(test.get('top_hit_rel'), '.1%')} vs {_num(test.get('bottom_hit_rel'), '.1%')}</p>
+            <div class="prob-legend"><span>rank in the universe, same session</span><span>markers = neutral zone</span></div>
+            <p class="card-meta">{_test_line(test, evaluation.get('horizon_days'))} · top vs bottom quintile beat the median
+               {_num(test.get('top_hit_rel'), '.1%')} vs {_num(test.get('bottom_hit_rel'), '.1%')}{_backtest_line(evaluation)}</p>
         </div>
     """)
 
@@ -432,7 +464,9 @@ def performance_overview(metrics):
         test, edge, summary = entry["final_test"], entry["edge"], entry["fold_summary"]
         test_rows.append({
             "Horizon": label, "Test period": " → ".join(test["period"]), "Rank IC": test["rank_ic"],
-            "IC t-stat": test.get("rank_ic_tstat"), "AUC (beat median)": test["auc_rel"],
+            "IC t-stat": (f"{test['rank_ic_tstat']:.2f}" if test.get("days", 0) / entry["horizon_days"]
+                          >= MIN_INDEPENDENT_PERIODS else "n/a"),
+            "AUC (beat median)": test["auc_rel"],
             "AUC (UP > 0.5%)": test["auc_abs"], "Top 20% beat median": test["top_hit_rel"],
             "Bottom 20% beat median": test["bottom_hit_rel"],
             "Edge": "reliable" if edge.get("reliable") else "none"})
@@ -446,32 +480,32 @@ def performance_overview(metrics):
         reported = baseline.get("originally_reported") or {}
         before = baseline.get("final_test") or {}
         compare_rows.append({
-            "Horizon": label, "Previously reported test AUC": reported.get("test_auc"),
-            "Previous model, new protocol: AUC (UP)": before.get("auc_abs"),
-            "Previous model: rank IC": before.get("rank_ic"),
-            "New model: AUC (UP)": test["auc_abs"], "New model: AUC (beat median)": test["auc_rel"],
-            "New model: rank IC": test["rank_ic"]})
+            "Horizon": label, "Old, as reported: AUC (UP)": reported.get("test_auc"),
+            "Old, purged: AUC (UP)": before.get("auc_abs"), "Old, purged: rank IC": before.get("rank_ic"),
+            "New: AUC (UP)": test["auc_abs"], "New: AUC (beat median)": test["auc_rel"],
+            "New: rank IC": test["rank_ic"]})
 
     three = st.column_config.NumberColumn(format="%.3f")
     four = st.column_config.NumberColumn(format="%+.4f")
     pct = st.column_config.NumberColumn(format="percent")
     st.markdown("##### Final test period (held out, scored once)")
     st.dataframe(pd.DataFrame(test_rows), hide_index=True, width="stretch", column_config={
-        "Rank IC": four, "IC t-stat": st.column_config.NumberColumn(format="%.2f"), "AUC (beat median)": three,
+        "Rank IC": four, "AUC (beat median)": three,
         "AUC (UP > 0.5%)": three, "Top 20% beat median": pct, "Bottom 20% beat median": pct})
     st.caption(f"Edge rule, fixed before the test period was scored: {protocol.get('edge_rule')}. Rank IC is the "
                "daily Spearman correlation between the model score and the realised forward return across stocks. "
-               "AUC 0.50 and IC 0 are a coin flip.")
+               "AUC 0.50 and IC 0 are a coin flip. The t-stat is left blank when the test period holds fewer than "
+               f"{MIN_INDEPENDENT_PERIODS} non-overlapping horizons (the yearly test holds about one).")
     st.markdown("##### Walk-forward validation (5 purged folds, mean ± std)")
     st.dataframe(pd.DataFrame(fold_rows), hide_index=True, width="stretch")
     st.markdown("##### Before and after")
     st.dataframe(pd.DataFrame(compare_rows), hide_index=True, width="stretch", column_config={
-        "Previously reported test AUC": three, "Previous model, new protocol: AUC (UP)": three,
-        "Previous model: rank IC": four, "New model: AUC (UP)": three, "New model: AUC (beat median)": three,
-        "New model: rank IC": four})
-    st.caption("\"Previously reported\" is the old pipeline's own test score (4 folds, NIFTY index in the test set, "
-               "weekly features selected on the validation folds). \"New protocol\" re-scores that same model "
-               "configuration with the purged walk-forward split on the same test period.")
+        "Old, as reported: AUC (UP)": three, "Old, purged: AUC (UP)": three, "Old, purged: rank IC": four,
+        "New: AUC (UP)": three, "New: AUC (beat median)": three, "New: rank IC": four})
+    st.caption("\"Old, as reported\" is the previous pipeline's own test score (4 folds, NIFTY index in the test "
+               "set, weekly features selected on the validation folds). \"Old, purged\" re-scores that same model "
+               "configuration with the purged walk-forward split on the same test period. All on the final test "
+               "period of each horizon.")
 
 
 def model_performance_section(metrics, horizon_choice):
@@ -581,6 +615,9 @@ def explanation_section(results):
     if not available:
         return
     st.markdown("##### Why the model says this")
+    st.caption("SHAP contributions of this stock minus those of the average universe stock on the same session. "
+               "Market-wide inputs (NIFTY, India VIX, USD/INR) are the same for every stock and cancel out, so the "
+               "bars show what sets this stock's rank apart.")
     tabs = st.tabs([h.capitalize() for h in available])
     for tab, (horizon, res) in zip(tabs, available.items()):
         with tab:

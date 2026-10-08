@@ -1,58 +1,57 @@
-2026-09-24 22:06:57,855 INFO TradeFlow training run | sklearn=1.8.0 lightgbm=4.7.0 | seed=42
-2026-09-24 22:06:58,147 INFO Loaded cached dataset: 382001 rows x 146 columns
-2026-09-24 22:07:00,331 ERROR $LTIM.NS: possibly delisted; no price data found  (period=10y) (Yahoo error = "No data found, symbol may be delisted")
-2026-09-24 22:07:00,331 ERROR 
-1 Failed download:
-2026-09-24 22:07:00,334 ERROR ['LTIM.NS']: possibly delisted; no price data found  (period=10y) (Yahoo error = "No data found, symbol may be delisted")
-2026-09-24 22:07:00,354 INFO Daily data: 187/188 tickers loaded (1 downloaded)
-2026-09-24 22:07:00,359 INFO Context source nifty    rows=2466 range=2016-09-19..2026-09-17
-2026-09-24 22:07:00,361 INFO Context source vix      rows=2451 range=2016-09-19..2026-09-17
-2026-09-24 22:07:00,363 INFO Context source usdinr   rows=2601 range=2016-09-19..2026-09-17
-2026-09-24 22:07:00,363 INFO Sector indices with history: ['^CNXIT', '^CNXPHARMA', '^NSEBANK']
-2026-09-24 22:07:00,364 INFO Leakage audit: point-in-time feature rebuild
-2026-09-24 22:07:30,149 INFO    checked 134 features on ['TCS.NS', 'MARUTI.NS', 'HDFCBANK.NS']: 0 look-ahead failures
-2026-09-24 22:07:35,648 INFO ====================================================================================================
-2026-09-24 22:07:35,649 INFO [weekly] horizon=5 days | labelled rows=381101
-2026-09-24 22:07:35,655 INFO    fold 1 train 2017-09-25..2021-10-01 (162882 rows) -> validate 2021-10-11..2022-08-29 (38196 rows)
-2026-09-24 22:07:35,665 INFO    fold 2 train 2017-09-25..2022-08-22 (201064 rows) -> validate 2022-08-30..2023-07-19 (38950 rows)
-2026-09-24 22:07:35,672 INFO    fold 3 train 2017-09-25..2023-07-12 (239989 rows) -> validate 2023-07-20..2024-06-13 (39512 rows)
-2026-09-24 22:07:35,681 INFO    fold 4 train 2017-09-25..2024-06-06 (279496 rows) -> validate 2024-06-14..2025-05-06 (39600 rows)
-2026-09-24 22:07:35,691 INFO    final train 2017-09-25..2025-05-08 (320356 rows) | TEST 2025-05-16..2026-09-10 (59845 rows)
-2026-09-24 22:07:35,779 INFO    embargo between training and test: 5 sessions (need 4) -> OK
-2026-09-24 22:07:54,298 INFO    [existing_hgb_baseline] 29 features, model=hgb
-2026-09-24 22:08:39,614 INFO       hgb      leaf15   best iters=300  mean CV AUC=0.5057
-2026-09-24 22:09:04,424 INFO       hgb      leaf7    best iters=300  mean CV AUC=0.5024
-2026-09-24 22:09:46,307 INFO       hgb      depth2   best iters=25   mean CV AUC=0.5059
-2026-09-24 22:09:49,166 INFO    [existing_hgb_baseline] CV AUC=0.5059 (folds [0.522, 0.514, 0.456, 0.531]) | test AUC=0.5360
-2026-09-24 22:09:49,199 INFO    [lgbm_baseline] 29 features, model=lgbm
-2026-09-24 22:10:30,805 INFO       lgbm     leaves7  best iters=400  mean CV AUC=0.5056
-2026-09-24 22:11:38,518 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.5085
-2026-09-24 22:13:02,532 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.5076
-2026-09-24 22:13:37,714 INFO       lgbm     depth2   best iters=400  mean CV AUC=0.5046
-2026-09-24 22:13:57,784 INFO    [lgbm_baseline] CV AUC=0.5085 (folds [0.528, 0.516, 0.496, 0.493]) | test AUC=0.5154
-2026-09-24 22:13:57,822 INFO    [lgbm_baseline_market] 55 features, model=lgbm
-2026-09-24 22:14:40,186 INFO       lgbm     leaves7  best iters=200  mean CV AUC=0.5158
-2026-09-24 22:15:31,874 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.5168
-2026-09-24 22:16:02,761 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.5186
-2026-09-24 22:16:27,780 INFO       lgbm     depth2   best iters=400  mean CV AUC=0.5142
-2026-09-24 22:17:03,553 INFO    [lgbm_baseline_market] CV AUC=0.5186 (folds [0.524, 0.555, 0.49, 0.506]) | test AUC=0.5161
-2026-09-24 22:17:03,587 INFO    [lgbm_baseline_daily_mtf] 43 features, model=lgbm
-2026-09-24 22:17:46,921 INFO       lgbm     leaves7  best iters=400  mean CV AUC=0.5094
-2026-09-24 22:19:01,751 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.5086
-2026-09-24 22:20:25,959 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.5077
-2026-09-24 22:21:03,823 INFO       lgbm     depth2   best iters=400  mean CV AUC=0.5074
-2026-09-24 22:21:07,355 INFO    [lgbm_baseline_daily_mtf] CV AUC=0.5094 (folds [0.529, 0.512, 0.494, 0.502]) | test AUC=0.5063
-2026-09-24 22:21:07,364 INFO    [lgbm_baseline_market_mtf] 69 features, model=lgbm
-2026-09-24 22:21:24,612 INFO       lgbm     leaves7  best iters=400  mean CV AUC=0.5163
-2026-09-24 22:22:37,656 INFO       lgbm     leaves15 best iters=400  mean CV AUC=0.5120
-2026-09-24 22:23:25,535 INFO       lgbm     leaves31 best iters=400  mean CV AUC=0.5186
-2026-09-24 22:24:07,454 INFO       lgbm     depth2   best iters=400  mean CV AUC=0.5137
-2026-09-24 22:25:05,346 INFO    [lgbm_baseline_market_mtf] CV AUC=0.5186 (folds [0.528, 0.551, 0.493, 0.503]) | test AUC=0.5244
-2026-09-24 22:25:05,380 INFO    [feature selection] 114 candidates (validation folds only, test never used)
-2026-09-24 22:25:13,101 INFO       correlation analysis on 69 features
-2026-09-24 22:26:04,788 INFO       mutual information
-2026-09-24 22:26:59,230 INFO       model gain/split importance
-2026-09-24 22:27:48,956 INFO       permutation importance (validation folds)
-2026-09-24 22:31:53,625 INFO       SHAP (LightGBM TreeSHAP)
-2026-09-24 22:32:51,327 INFO       selected 26 of 114 candidate features
-2026-09-24 22:32:51,327 INFO    [lgbm_selected] 26 features, model=lgbm
+2026-10-08 20:20:30,784 INFO TradeFlow training run | xgboost=3.4.1 | device=cuda | seed=42
+2026-10-08 20:20:30,913 INFO Loaded cached dataset: 381903 rows x 151 columns, data frozen at 2026-09-17
+2026-10-08 20:20:30,994 INFO Daily data: 186/186 tickers loaded (0 downloaded)
+2026-10-08 20:20:31,072 INFO Context source nifty    rows=2466 range=2016-09-19..2026-09-17
+2026-10-08 20:20:31,072 INFO Context source vix      rows=2451 range=2016-09-19..2026-09-17
+2026-10-08 20:20:31,072 INFO Context source usdinr   rows=2601 range=2016-09-19..2026-09-17
+2026-10-08 20:20:31,073 INFO Sector indices with history: ['^CNXIT', '^CNXPHARMA', '^NSEBANK'] | data frozen at 2026-09-17
+2026-10-08 20:20:31,075 INFO Leakage audit: point-in-time feature rebuild
+2026-10-08 20:20:36,430 INFO    checked 139 features on ['TCS.NS', 'MARUTI.NS', 'HDFCBANK.NS']: 0 look-ahead failures
+2026-10-08 20:20:36,831 INFO Panel: 381903 rows, 180 stocks, 2017-09-25..2026-09-17
+2026-10-08 20:20:36,911 INFO ====================================================================================================
+2026-10-08 20:20:36,911 INFO [weekly] 5 sessions ahead | target: rises more than 0.5% over the horizon | 69 candidate features
+2026-10-08 20:20:36,911 INFO    fold1 train 2017-09-25..2020-10-06 (120718 rows) | gap 5 sessions | evaluate 2020-10-14..2021-09-09 (38644 rows)
+2026-10-08 20:20:36,911 INFO    fold2 train 2017-09-25..2021-09-02 (159357 rows) | gap 5 sessions | evaluate 2021-09-13..2022-08-05 (39181 rows)
+2026-10-08 20:20:36,911 INFO    fold3 train 2017-09-25..2022-07-29 (198523 rows) | gap 5 sessions | evaluate 2022-08-08..2023-07-07 (39954 rows)
+2026-10-08 20:20:36,911 INFO    fold4 train 2017-09-25..2023-06-30 (238452 rows) | gap 5 sessions | evaluate 2023-07-10..2024-06-10 (40404 rows)
+2026-10-08 20:20:36,911 INFO    fold5 train 2017-09-25..2024-06-03 (278851 rows) | gap 5 sessions | evaluate 2024-06-11..2025-05-08 (40500 rows)
+2026-10-08 20:20:36,911 INFO    test  train 2017-09-25..2025-05-08 (320251 rows) | gap 5 sessions | evaluate 2025-05-16..2026-09-10 (59852 rows)
+2026-10-08 20:20:59,230 INFO    xgboost                            IC +0.0338 +0.0294 +0.0296 +0.0534 +0.0212 | AUC rel 0.5048 abs 0.5093 | 22s
+2026-10-08 20:21:12,058 INFO    [test] AUC rel 0.5068 abs 0.5234 | rank IC +0.0451 (t=4.47) | top/bottom 0.527/0.471 | edge: reliable
+2026-10-08 20:21:26,892 INFO    baseline                           IC +0.0389 +0.0281 +0.0312 +0.0571 +0.0286 | AUC rel 0.5061 abs 0.5126 | 14s
+2026-10-08 20:21:31,089 INFO    [baseline] test AUC rel 0.5077 abs 0.4854 | rank IC +0.0516
+2026-10-08 20:21:32,299 INFO    [backtest model] 66 rebalances | return 0.0484 | benchmark 0.0717 | sharpe 0.316
+2026-10-08 20:21:32,299 INFO    [backtest baseline] 66 rebalances | return 0.0679 | benchmark 0.0717 | sharpe 0.427
+2026-10-08 20:21:54,498 INFO ====================================================================================================
+2026-10-08 20:21:54,498 INFO [monthly] 21 sessions ahead | target: rises more than 0.5% over the horizon | 69 candidate features
+2026-10-08 20:21:54,498 INFO    fold1 train 2017-09-25..2020-08-26 (115958 rows) | gap 21 sessions | evaluate 2020-09-25..2021-08-17 (37948 rows)
+2026-10-08 20:21:54,498 INFO    fold2 train 2017-09-25..2021-07-16 (153885 rows) | gap 21 sessions | evaluate 2021-08-18..2022-07-08 (38437 rows)
+2026-10-08 20:21:54,498 INFO    fold3 train 2017-09-25..2022-06-09 (192259 rows) | gap 21 sessions | evaluate 2022-07-11..2023-06-02 (39138 rows)
+2026-10-08 20:21:54,498 INFO    fold4 train 2017-09-25..2023-05-04 (231309 rows) | gap 21 sessions | evaluate 2023-06-05..2024-04-30 (39840 rows)
+2026-10-08 20:21:54,498 INFO    fold5 train 2017-09-25..2024-03-27 (271111 rows) | gap 21 sessions | evaluate 2024-05-02..2025-03-20 (39960 rows)
+2026-10-08 20:21:54,498 INFO    test  train 2017-09-25..2025-03-20 (314851 rows) | gap 21 sessions | evaluate 2025-04-25..2026-08-19 (59492 rows)
+2026-10-08 20:22:15,458 INFO    xgboost                            IC +0.0274 +0.0354 -0.0495 -0.0035 -0.0276 | AUC rel 0.4969 abs 0.4903 | 21s
+2026-10-08 20:22:28,190 INFO    [test] AUC rel 0.5075 abs 0.4944 | rank IC +0.0423 (t=1.96) | top/bottom 0.527/0.474 | edge: none (rank IC positive in only 2 of 5 walk-forward folds; out-of-sample rank IC t-stat 0.61 (needs 2))
+2026-10-08 20:22:47,086 INFO    baseline                           IC -0.0033 +0.0414 -0.0472 +0.0357 -0.0028 | AUC rel 0.4987 abs 0.5182 | 19s
+2026-10-08 20:22:52,615 INFO    [baseline] test AUC rel 0.5089 abs 0.5354 | rank IC +0.0302
+2026-10-08 20:22:53,373 INFO    [backtest model] 15 rebalances | return 0.22 | benchmark 0.1549 | sharpe 0.947
+2026-10-08 20:22:53,373 INFO    [backtest baseline] 15 rebalances | return 0.1337 | benchmark 0.1549 | sharpe 0.649
+2026-10-08 20:23:15,199 INFO ====================================================================================================
+2026-10-08 20:23:15,199 INFO [yearly] 252 sessions ahead | target: rises more than 0.5% over the horizon | 69 candidate features
+2026-10-08 20:23:15,199 INFO    fold1 train 2017-09-25..2019-01-04 (49240 rows) | gap 252 sessions | evaluate 2020-01-20..2020-09-24 (28751 rows)
+2026-10-08 20:23:15,199 INFO    fold2 train 2017-09-25..2019-09-19 (77331 rows) | gap 252 sessions | evaluate 2020-09-25..2021-06-04 (29227 rows)
+2026-10-08 20:23:15,199 INFO    fold3 train 2017-09-25..2020-06-03 (105787 rows) | gap 252 sessions | evaluate 2021-06-07..2022-02-09 (29410 rows)
+2026-10-08 20:23:15,199 INFO    fold4 train 2017-09-25..2021-02-03 (134904 rows) | gap 252 sessions | evaluate 2022-02-10..2022-10-19 (29754 rows)
+2026-10-08 20:23:15,200 INFO    fold5 train 2017-09-25..2021-10-13 (164149 rows) | gap 252 sessions | evaluate 2022-10-20..2023-06-27 (30175 rows)
+2026-10-08 20:23:15,200 INFO    test  train 2017-09-25..2023-06-27 (238094 rows) | gap 252 sessions | evaluate 2024-07-10..2025-09-16 (53192 rows)
+2026-10-08 20:23:18,416 INFO    xgboost                            IC -0.0674 -0.0507 -0.0093 -0.0419 -0.1596 | AUC rel 0.4735 abs 0.5245 | 3s
+2026-10-08 20:23:25,844 INFO    [test] AUC rel 0.5044 abs 0.5212 | rank IC +0.0227 (t=2.72) | top/bottom 0.503/0.473 | edge: none (rank IC positive in only 0 of 5 walk-forward folds; out-of-sample rank IC t-stat -2.36 (needs 2))
+2026-10-08 20:23:30,076 INFO    baseline                           IC -0.0845 -0.0705 -0.0150 -0.0503 -0.0556 | AUC rel 0.4762 abs 0.5180 | 2s
+2026-10-08 20:23:30,912 INFO    [baseline] test AUC rel 0.5000 abs 0.5457 | rank IC +0.0054
+2026-10-08 20:23:31,528 INFO    [backtest model] 1 rebalances | return 0.0064 | benchmark 0.0125 | sharpe None
+2026-10-08 20:23:31,528 INFO    [backtest baseline] 1 rebalances | return -0.0072 | benchmark 0.0125 | sharpe None
+2026-10-08 20:23:47,607 INFO    [weekly] saved model bundle (E0)
+2026-10-08 20:23:47,629 INFO    [monthly] saved model bundle (E0)
+2026-10-08 20:23:47,633 INFO    [yearly] saved model bundle (E0)
+2026-10-08 20:23:47,841 INFO Reports written to D:\TradeFlow\reports (19 files)
+2026-10-08 20:23:47,841 INFO Done in 3.3 minutes

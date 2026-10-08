@@ -32,6 +32,7 @@ from backtest.engine import BacktestConfig, run_backtest
 from data.fetcher import (CACHE_DIR, INDIA_VIX_TICKER, NIFTY_TICKER, USDINR_TICKER, get_many_intraday,
                           get_many_stocks)
 from data.sectors import SECTOR_INDEX_TICKERS, get_sector
+from data.universe import UNIVERSE
 from features.indicators import HORIZONS, add_targets
 from features.leakage import (audit_point_in_time, check_intraday_alignment, check_suspicious_features,
                               check_target_leakage)
@@ -45,40 +46,7 @@ from models.panel import prepare_panel
 from models.training import RANDOM_STATE, detect_device, to_cpu
 from models.walkforward import kept_feature_share, score_split, walk_forward
 
-# Tradable stocks only: NIFTY 50 is loaded separately as market context (load_context_sources).
-# LTIM.NS and JBCHEPHARM.NS were removed in Oct 2026: Yahoo Finance returns no usable history for either.
-STOCKS = [
-    'RELIANCE.NS', 'TCS.NS', 'HDFCBANK.NS', 'ICICIBANK.NS', 'INFY.NS', 'SBIN.NS',
-    'BHARTIARTL.NS', 'ITC.NS', 'HINDUNILVR.NS', 'LT.NS', 'BAJFINANCE.NS', 'AXISBANK.NS',
-    'ASIANPAINT.NS', 'MARUTI.NS', 'SUNPHARMA.NS', 'TITAN.NS', 'HCLTECH.NS', 'TATASTEEL.NS',
-    'NTPC.NS', 'POWERGRID.NS', 'KOTAKBANK.NS', 'ADANIENT.NS', 'COALINDIA.NS', 'BAJAJFINSV.NS',
-    'ULTRACEMCO.NS', 'JSWSTEEL.NS', 'GRASIM.NS', 'M&M.NS', 'INDUSINDBK.NS', 'HINDALCO.NS',
-    'NESTLEIND.NS', 'ADANIPORTS.NS', 'ONGC.NS', 'TECHM.NS', 'WIPRO.NS', 'BRITANNIA.NS',
-    'EICHERMOT.NS', 'BPCL.NS', 'DIVISLAB.NS', 'CIPLA.NS', 'APOLLOHOSP.NS', 'TATACONSUM.NS',
-    'HEROMOTOCO.NS', 'DRREDDY.NS', 'BAJAJ-AUTO.NS', 'YESBANK.NS', 'IDEA.NS', 'UPL.NS',
-    'BANDHANBNK.NS', 'DLF.NS', 'VBL.NS', 'PIDILITIND.NS', 'SIEMENS.NS', 'HAL.NS', 'BEL.NS',
-    'ABB.NS', 'GAIL.NS', 'PNB.NS', 'BANKBARODA.NS', 'CANBK.NS', 'TRENT.NS', 'GODREJCP.NS',
-    'DABUR.NS', 'CHOLAFIN.NS', 'TVSMOTOR.NS', 'POLYCAB.NS', 'HAVELLS.NS',
-    'SRF.NS', 'COLPAL.NS', 'SHREECEM.NS', 'AMBUJACEM.NS', 'BHEL.NS', 'RECLTD.NS', 'PFC.NS',
-    'IRFC.NS', 'RVNL.NS', 'MAZDOCK.NS', 'COCHINSHIP.NS', 'IRCTC.NS', 'CONCOR.NS',
-    'TATACOMM.NS', 'LUPIN.NS', 'AUBANK.NS', 'IDFCFIRSTB.NS', 'FEDERALBNK.NS', 'RBLBANK.NS',
-    'ABCAPITAL.NS', 'MFSL.NS', 'LICHSGFIN.NS', 'MPHASIS.NS', 'COFORGE.NS', 'PERSISTENT.NS',
-    'ZENSARTECH.NS', 'KPITTECH.NS', 'TATAELXSI.NS', 'OIL.NS', 'HINDPETRO.NS', 'IOC.NS',
-    'MRPL.NS', 'CHENNPETRO.NS', 'PETRONET.NS', 'TATAPOWER.NS', 'NHPC.NS', 'SJVN.NS',
-    'TORNTPOWER.NS', 'CESC.NS', 'JINDALSTEL.NS', 'SAIL.NS', 'NMDC.NS', 'NATIONALUM.NS',
-    'VEDL.NS', 'ASHOKLEY.NS', 'ESCORTS.NS', 'BALKRISIND.NS', 'MRF.NS', 'APOLLOTYRE.NS',
-    'TATACHEM.NS', 'DEEPAKNTR.NS', 'AARTIIND.NS', 'PIIND.NS', 'COROMANDEL.NS', 'GNFC.NS',
-    'JUBLFOOD.NS', 'PAGEIND.NS', 'METROBRAND.NS', 'BATAINDIA.NS', 'RELAXO.NS', 'ABFRL.NS',
-    'NYKAA.NS', 'PAYTM.NS', 'DELHIVERY.NS', 'INDIAMART.NS', 'POLICYBZR.NS', 'CARBORUNIV.NS',
-    'CUMMINSIND.NS', 'SKFINDIA.NS', 'TIMKEN.NS', 'VOLTAS.NS', 'BLUESTARCO.NS', 'DIXON.NS',
-    'AMBER.NS', 'HINDZINC.NS', 'GLENMARK.NS', 'ALKEM.NS', 'ASTRAL.NS', 'OBEROIRLTY.NS',
-    'PHOENIXLTD.NS', 'GODREJPROP.NS', 'BRIGADE.NS', 'PRESTIGE.NS', 'UNIONBANK.NS',
-    'MAHABANK.NS', 'J&KBANK.NS', 'KARURVYSYA.NS', 'SOUTHBANK.NS', 'POONAWALLA.NS',
-    'LTF.NS', 'M&MFIN.NS', 'MANAPPURAM.NS', 'ANGELONE.NS', 'MCX.NS', 'BSE.NS', 'CDSL.NS',
-    'HUDCO.NS', 'NBCC.NS', 'KEC.NS', 'KPIL.NS', 'IRB.NS', 'RAYMOND.NS', 'KAYNES.NS',
-    'SYNGENE.NS', 'LAURUSLABS.NS', 'ZYDUSLIFE.NS', 'NATCOPHARM.NS',
-    'NAM-INDIA.NS', 'HDFCAMC.NS', 'RADICO.NS', 'TIINDIA.NS', 'KEI.NS', 'EXIDEIND.NS'
-]
+STOCKS = UNIVERSE
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = os.path.join(ROOT, "models", "saved_models")

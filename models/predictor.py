@@ -4,11 +4,14 @@
 (models/saved_models/metrics.json) and turns the latest feature row into a forecast. Features are built with
 features.pipeline.build_feature_frame, the same function training uses.
 
-A forecast is relative to the cross-section: the stock's model score is ranked against the scores of the whole
-training universe on the latest training date (`reference_probs`), and the call comes from that rank.
-
 A horizon only gets a call when its out-of-sample evaluation passed the edge rule recorded in metrics.json.
 Otherwise the forecast is reported as "no reliable edge" and no direction is given.
+
+A call is relative: the stock's model score is ranked against the scores of every universe stock on the same
+session (models.inference.load_universe_snapshot), because that same-day ranking is what the evaluation measured.
+The training-time cross-section (`reference_probs`) is not used: the scores move with market-wide features, so a
+rank against an older date would mostly reflect how the market has changed since then. Without the same-session
+universe there is no call.
 """
 import json
 import logging
@@ -24,6 +27,8 @@ logger = logging.getLogger(__name__)
 
 # Stocks ranked inside this percentile band get NEUTRAL: any edge is concentrated in the extremes
 NEUTRAL_BAND = (40, 60)
+# A same-session rank needs most of the 180-stock universe
+MIN_SAME_DAY_STOCKS = 90
 
 MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_models")
 METRICS_FILE = "metrics.json"
@@ -86,11 +91,25 @@ class StockPredictor:
     def features(self):
         return sorted({f for b in self.models.values() for f in b.get("raw_features", b["features"])})
 
-    @staticmethod
-    def _score(bundle, row):
-        return float(bundle["model"].predict_proba(row[bundle["features"]])[0][1])
+    @property
+    def needs_universe(self):
+        """True when at least one horizon makes calls, which need the same-session universe."""
+        return any(self.has_edge(period) for period in self.models)
 
-    def predict_all(self, current_data, explain=False):
+    @staticmethod
+    def _scores(bundle, frame):
+        return bundle["model"].predict_proba(frame[bundle["features"]])[:, 1]
+
+    def _same_day_rank(self, bundle, score, date, universe):
+        """Percentile of the score among the universe's scores on the same session, or None."""
+        if universe is None or universe.empty or any(f not in universe.columns for f in bundle["features"]):
+            return None, "same-session universe data could not be loaded"
+        same_day = universe[universe["Date"] == date]
+        if len(same_day) < MIN_SAME_DAY_STOCKS:
+            return None, f"universe data is for {universe['Date'].max():%d %b %Y}, not this ticker's last session"
+        return percentile_rank(self._scores(bundle, same_day), score), f"{len(same_day)} stocks on {date:%d %b %Y}"
+
+    def predict_all(self, current_data, explain=False, universe=None):
         if not self.models or current_data is None or current_data.empty:
             return None
 
@@ -99,17 +118,18 @@ class StockPredictor:
             try:
                 last_row = current_data.tail(1)
                 if bundle.get("cross_sectional"):
-                    logger.warning("%s model needs same-day universe ranks; not available for one ticker", period)
+                    logger.warning("%s model needs same-day universe ranks of its inputs; not supported", period)
                     continue
                 missing = [f for f in bundle["features"] if f not in last_row.columns]
                 if missing:
                     logger.warning("%s model: %d features missing from the input frame", period, len(missing))
                     continue
-                score = self._score(bundle, last_row)
-                reference = np.asarray(bundle.get("reference_probs") or [])
-                percentile = percentile_rank(reference, score) if reference.size else None
+                score = float(self._scores(bundle, last_row)[0])
+                reliable = self.has_edge(period)
+                percentile, basis = (self._same_day_rank(bundle, score, last_row["Date"].iloc[0], universe)
+                                     if reliable else (None, None))
                 if percentile is None:
-                    call = "UP" if score >= bundle["threshold"] else "DOWN"
+                    call = None
                 elif percentile >= NEUTRAL_BAND[1]:
                     call = "UP"
                 elif percentile <= NEUTRAL_BAND[0]:
@@ -117,15 +137,15 @@ class StockPredictor:
                 else:
                     call = "NEUTRAL"
                 target = bundle.get("target", "absolute")
-                reliable = self.has_edge(period)
+                direction = "NO_EDGE" if not reliable else call or "NO_RANK"
                 results[period] = {
                     "reliable": reliable,
-                    "direction": call if reliable else "NO_EDGE",
-                    "label": CALL_LABELS[call] if reliable else "NO RELIABLE EDGE",
+                    "direction": direction,
+                    "label": {"NO_EDGE": "NO RELIABLE EDGE", "NO_RANK": "RANK UNAVAILABLE"}.get(
+                        direction, CALL_LABELS.get(direction)),
                     "probability": round(score * 100, 2),
-                    "threshold": bundle["threshold"],
                     "percentile": None if percentile is None else round(percentile, 1),
-                    "reference_date": bundle.get("reference_date"),
+                    "rank_basis": basis,
                     "target": target,
                     "target_description": bundle.get("target_description"),
                     "model_type": bundle.get("model_type"),
@@ -134,24 +154,34 @@ class StockPredictor:
                     "n_features": len(bundle["features"]),
                     "train_period": bundle.get("train_period"),
                     "evaluation": self.evaluation(period),
-                    "explanation": self.explain(period, current_data) if explain and reliable else None,
+                    "explanation": self.explain(period, current_data, universe) if explain and call else None,
                 }
             except Exception:
                 logger.exception("Prediction failed for the %s horizon", period)
         return results or None
 
-    def explain(self, period, current_data, top_n=6):
-        """SHAP contributions for the latest row, from XGBoost's exact TreeSHAP."""
+    def explain(self, period, current_data, universe=None, top_n=6):
+        """Why the stock ranks where it does: its SHAP contributions minus the average stock's on the same session.
+
+        Market-wide features (NIFTY, VIX, USD/INR) take the same value for every stock, so they move every score
+        together and cancel out here; what is left is what sets this stock apart from its peers, which is what a
+        relative call is about. XGBoost's exact TreeSHAP, in log-odds.
+        """
         bundle = self.models.get(period)
-        if bundle is None or not hasattr(bundle["model"], "get_booster"):
+        if bundle is None or not hasattr(bundle["model"], "get_booster") or universe is None:
             return None
         try:
             import xgboost
             row = current_data.tail(1)
+            same_day = universe[universe["Date"] == row["Date"].iloc[0]]
+            if same_day.empty:
+                return None
             columns = bundle["features"]
             names = bundle.get("raw_features", columns)
-            contrib = bundle["model"].get_booster().predict(xgboost.DMatrix(row[columns]), pred_contribs=True)[0]
-            series = pd.Series(contrib[:-1], index=names).sort_values(key=abs, ascending=False).head(top_n)
+            booster = bundle["model"].get_booster()
+            own = booster.predict(xgboost.DMatrix(row[columns]), pred_contribs=True)[0, :-1]
+            peers = booster.predict(xgboost.DMatrix(same_day[columns]), pred_contribs=True)[:, :-1].mean(axis=0)
+            series = pd.Series(own - peers, index=names).sort_values(key=abs, ascending=False).head(top_n)
             values = dict(zip(names, row[columns].iloc[0].tolist()))
             return [{"feature": f, "shap_value": float(v), "value": float(values[f])} for f, v in series.items()]
         except Exception:

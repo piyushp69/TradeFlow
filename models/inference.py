@@ -8,9 +8,11 @@ import logging
 
 import pandas as pd
 
-from data.fetcher import (IST, SESSION_CLOSE, drop_incomplete_bars, get_many_stocks, get_stock_data,
-                          load_india_vix, load_intraday_data, load_nifty_data, load_usdinr_data)
+from data.fetcher import (INDIA_VIX_TICKER, IST, NIFTY_TICKER, SESSION_CLOSE, USDINR_TICKER, drop_incomplete_bars,
+                          get_many_stocks, get_stock_data, load_india_vix, load_intraday_data, load_nifty_data,
+                          load_usdinr_data)
 from data.sectors import SECTOR_INDEX_TICKERS, get_sector, get_sector_peers
+from data.universe import UNIVERSE
 from features.market import MarketContext, SectorPanel
 from features.pipeline import build_feature_frame
 
@@ -70,6 +72,39 @@ def load_live_frame(ticker, with_intraday=True):
     if frame is not None:
         meta["feature_coverage"] = float(frame.tail(1).notna().mean(axis=1).iloc[0]) if len(frame) else 0.0
     return raw, frame, meta
+
+
+def load_universe_snapshot(tickers=UNIVERSE, period="2y"):
+    """Feature rows of every universe stock on the latest completed session, built exactly as in training.
+
+    The out-of-sample evaluation measured how well the model ranks stocks against each other on the same day, so a
+    call must rank the ticker against this same-session cross-section (not against an older reference date).
+    Two years of history cover every feature's warm-up. Returns None when the download fails.
+    """
+    context_tickers = [NIFTY_TICKER, INDIA_VIX_TICKER, USDINR_TICKER] + list(SECTOR_INDEX_TICKERS.values())
+    try:
+        prices = get_many_stocks(list(tickers) + context_tickers, period=period, use_cache=False, write_cache=False)
+    except Exception:
+        logger.exception("Universe download failed")
+        return None
+    stocks = {t: prices[t] for t in tickers if t in prices}
+    context = MarketContext(nifty=prices.get(NIFTY_TICKER), vix=prices.get(INDIA_VIX_TICKER),
+                            usdinr=prices.get(USDINR_TICKER),
+                            sector_panel=SectorPanel(stocks, {t: prices[t] for t in SECTOR_INDEX_TICKERS.values()
+                                                              if t in prices}))
+    recent = [frame.tail(5) for frame in (completed_sessions(build_feature_frame(raw, context, None))
+                                          for raw in stocks.values()) if frame is not None and not frame.empty]
+    if not recent:
+        return None
+    recent = pd.concat(recent, ignore_index=True)
+    # The latest session that at least half of the universe has: a bar that Yahoo has published for only a few
+    # stocks must not become a tiny cross-section
+    counts = recent["Date"].value_counts()
+    common = counts[counts >= len(tickers) // 2]
+    if common.empty:
+        logger.warning("No recent session is shared by half of the %d universe stocks", len(tickers))
+        return None
+    return recent[recent["Date"] == common.index.max()].reset_index(drop=True)
 
 
 def completed_sessions(frame, now=None):

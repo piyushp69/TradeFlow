@@ -1,22 +1,22 @@
 {
-  "enhanced": {
+  "model": {
     "metrics": {
-      "cumulative_return": -0.0079,
-      "annualised_return": -0.0079,
+      "cumulative_return": 0.0064,
+      "annualised_return": 0.0064,
       "annualised_volatility": 0.0,
       "sharpe_ratio": null,
       "max_drawdown": 0.0,
-      "win_rate": 0.3243,
-      "profit_factor": 0.826,
-      "number_of_trades": 37,
-      "average_trade_return": -0.0094,
+      "win_rate": 0.4167,
+      "profit_factor": 1.114,
+      "number_of_trades": 36,
+      "average_trade_return": 0.0064,
       "periods": 1,
       "total_cost_paid": 0.003,
-      "excess_return_vs_benchmark": -0.0206
+      "excess_return_vs_benchmark": -0.0061
     },
     "benchmark": {
-      "cumulative_return": 0.0127,
-      "annualised_return": 0.0127,
+      "cumulative_return": 0.0125,
+      "annualised_return": 0.0125,
       "annualised_volatility": 0.0,
       "sharpe_ratio": null,
       "max_drawdown": 0.0,
@@ -44,22 +44,22 @@
   },
   "baseline": {
     "metrics": {
-      "cumulative_return": -0.0079,
-      "annualised_return": -0.0079,
+      "cumulative_return": -0.0072,
+      "annualised_return": -0.0072,
       "annualised_volatility": 0.0,
       "sharpe_ratio": null,
       "max_drawdown": 0.0,
-      "win_rate": 0.3243,
-      "profit_factor": 0.826,
-      "number_of_trades": 37,
-      "average_trade_return": -0.0094,
+      "win_rate": 0.3056,
+      "profit_factor": 0.862,
+      "number_of_trades": 36,
+      "average_trade_return": -0.0072,
       "periods": 1,
       "total_cost_paid": 0.003,
-      "excess_return_vs_benchmark": -0.0206
+      "excess_return_vs_benchmark": -0.0197
     },
     "benchmark": {
-      "cumulative_return": 0.0127,
-      "annualised_return": 0.0127,
+      "cumulative_return": 0.0125,
+      "annualised_return": 0.0125,
       "annualised_volatility": 0.0,
       "sharpe_ratio": null,
       "max_drawdown": 0.0,

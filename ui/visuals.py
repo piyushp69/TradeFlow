@@ -89,9 +89,11 @@ def _empty(message, height=260):
 
 
 def _base_layout(fig, height, title=None, showlegend=False):
-    fig.update_layout(template="plotly_dark", height=height, title=title, showlegend=showlegend,
+    fig.update_layout(template="plotly_dark", height=height, showlegend=showlegend,
                       paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                       margin=dict(l=0, r=0, t=40 if title else 10, b=0), hovermode="closest")
+    if title:   # title=None renders as the text "undefined" in the browser
+        fig.update_layout(title=title)
     fig.update_xaxes(showgrid=False)
     fig.update_yaxes(gridcolor=GRID, zeroline=False)
     return fig
@@ -204,7 +206,7 @@ def plot_shap_explanation(explanation):
     fig = go.Figure(go.Bar(x=[e["shap_value"] for e in data], y=labels, orientation="h", marker_color=colors))
     fig.add_vline(x=0, line=dict(color="#4b5563", width=1))
     fig.update_layout(yaxis=dict(automargin=True))
-    fig.update_xaxes(title_text="pushes the score down  <->  pushes the score up",
+    fig.update_xaxes(title_text="lowers the rank  <->  raises the rank (vs the average stock, same session)",
                      title_font=dict(size=11, color="#8b93a3"))
     return _base_layout(fig, max(280, 34 * len(data)))
 

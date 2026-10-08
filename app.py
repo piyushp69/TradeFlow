@@ -1,6 +1,7 @@
 import streamlit as st
 
-from models.inference import completed_sessions, load_live_frame, market_snapshot, timeframe_snapshot
+from models.inference import (completed_sessions, load_live_frame, load_universe_snapshot, market_snapshot,
+                              timeframe_snapshot)
 from models.predictor import StockPredictor
 from ui import layout
 from ui.visuals import plot_price_action
@@ -16,6 +17,12 @@ st.set_page_config(
 @st.cache_resource
 def load_predictor():
     return StockPredictor()
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_universe():
+    """Every universe stock's features on the latest completed session (calls rank against this)."""
+    return load_universe_snapshot()
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -56,7 +63,11 @@ if processed is None:
 predictor = load_predictor()
 # The models were trained on complete sessions: during market hours, forecast from the last completed close
 model_input = completed_sessions(processed)
-results = predictor.predict_all(model_input, explain=True) or {}
+universe = None
+if predictor.needs_universe:
+    with st.spinner("Scoring the 180-stock universe on the same session (cached for an hour)..."):
+        universe = load_universe()
+results = predictor.predict_all(model_input, explain=True, universe=universe) or {}
 
 st.markdown("### Forecast Summary")
 if len(model_input) < len(processed) and not model_input.empty:
@@ -69,9 +80,10 @@ if results:
         if key in results:
             with col:
                 layout.forecast_card(label, horizon_text, results[key])
-    st.caption("Calls are relative to ~180 NSE stocks: OUTPERFORM means the stock's model score is in the top 40% "
-               "of the universe, UNDERPERFORM the bottom 40%. A horizon whose out-of-sample evaluation did not show a "
-               "consistent edge says so and makes no call. Not financial advice.")
+    st.caption("Calls are relative to the 180-stock universe on the same session: OUTPERFORM means the stock's model "
+               "score is in the top 40%, UNDERPERFORM the bottom 40%. It does not mean the price will rise; in a "
+               "falling market a top-ranked stock can still fall. Horizons whose out-of-sample evaluation did not show "
+               "a consistent edge say so and make no call. Not financial advice.")
 elif predictor.models:
     st.error("The forecast could not be computed for this ticker. Check the app logs for details.")
 else:
